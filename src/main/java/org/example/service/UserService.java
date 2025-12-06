@@ -1,6 +1,9 @@
 package org.example.service;
 
 import org.example.dto.UserDTO;
+import org.example.dto.UserLoginDTO;
+import org.example.vo.UserLoginVO;
+
 import java.util.List;
 
 /**
@@ -13,38 +16,11 @@ public interface UserService {
     UserDTO createUser(UserDTO userDTO);
 
     /**
-     * 更新用户信息
+     * 用户登录
+     *
+     * @param loginDTO 登录信息
+     * @return 登录响应（包含token）
      */
-    UserDTO updateUser(Long id, UserDTO userDTO);
-
-    /**
-     * 删除用户
-     */
-    void deleteUser(Long id);
-
-    /**
-     * 根据ID获取用户
-     */
-    UserDTO getUserById(Long id);
-
-    /**
-     * 根据用户名获取用户
-     */
-    UserDTO getUserByUsername(String username);
-
-    /**
-     * 获取所有用户
-     */
-    List<UserDTO> getAllUsers();
-
-    /**
-     * 检查用户名是否存在
-     */
-    boolean existsByUsername(String username);
-
-    /**
-     * 检查邮箱是否存在
-     */
-    boolean existsByPhone(String email);
+    UserLoginVO login(UserLoginDTO loginDTO);
 }
 

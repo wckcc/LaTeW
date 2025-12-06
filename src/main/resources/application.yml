@@ -1,0 +1,27 @@
+spring:
+  # 数据源配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/latew?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 518518
+
+# MyBatis配置
+mybatis:
+  # Mapper XML文件位置
+  mapper-locations: classpath:mapper/*.xml
+  # 实体类包路径
+  type-aliases-package: org.example.entity
+  configuration:
+    # 开启驼峰命名转换
+    map-underscore-to-camel-case: true
+
+# 服务器配置
+server:
+  port: 8080
+
+# JWT配置
+jwt:
+  secret: latew-secret-key-2024-very-long-secret-key-for-security
+  expiration: 86400000  # 24小时，单位：毫秒
+
