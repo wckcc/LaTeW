@@ -5,6 +5,13 @@ spring:
     url: jdbc:mysql://localhost:3306/latew?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: 518518
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB  # 单个文件最大大小
+      max-request-size: 50MB  # 请求最大大小
+      file-size-threshold: 2KB  # 文件写入磁盘的阈值
 
 # MyBatis配置
 mybatis:
@@ -32,4 +39,12 @@ latex:
     output-dir: ./static/pdf  # PDF输出目录
     pdflatex-path: pdflatex   # pdflatex命令路径（如果不在PATH中，请指定完整路径，如：C:/texlive/2024/bin/windows/pdflatex.exe）
     timeout: 30               # 编译超时时间（秒）
+
+# 火山引擎 API配置（豆包大模型）
+volcengine:
+  api:
+    url: https://ark.cn-beijing.volces.com/api/v3/chat/completions  # 火山引擎 API地址
+    api-key: ${ARK_API_KEY:5d7cb0e2-2484-45ea-ad6a-99c82b6a8eac}  # 火山引擎 API密钥（可通过环境变量ARK_API_KEY设置）
+    model: doubao-seed-1-8-251228  # 使用的模型（豆包）
+    timeout: 120  # 请求超时时间（秒）
 

@@ -3,11 +3,14 @@ package org.example.controller;
 import jakarta.servlet.http.HttpServletRequest;
 import org.example.dto.CompileRequest;
 import org.example.dto.CompileResult;
+import org.example.dto.PdfToLatexResponse;
 import org.example.dto.ProjectDTO;
 import org.example.dto.ResponseResult;
+import org.example.service.AIService;
 import org.example.service.ProjectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,6 +26,9 @@ public class ProjectController {
 
     @Autowired
     private ProjectService projectService;
+
+    @Autowired
+    private AIService aiService;
 
     /**
      * 创建项目
@@ -166,6 +172,71 @@ public class ProjectController {
             errorResult.setErrorMessage("编译失败: " + e.getMessage());
             errorResult.setCreatedAt(LocalDateTime.now());
             return ResponseResult.success("编译失败", errorResult);
+        }
+    }
+
+    /**
+     * 从PDF文件创建项目
+     * POST /api/projects/from-pdf
+     */
+    @PostMapping("/from-pdf")
+    public ResponseResult<ProjectDTO> createProjectFromPdf(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("name") String projectName,
+            HttpServletRequest request) {
+        
+        // 从请求中获取当前登录用户的ID（由JWT拦截器设置）
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+
+        // 验证文件
+        if (file == null || file.isEmpty()) {
+            return ResponseResult.error(400, "PDF文件不能为空");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.equals("application/pdf")) {
+            return ResponseResult.error(400, "请上传PDF格式的文件");
+        }
+
+        // 验证项目名称
+        if (projectName == null || projectName.trim().isEmpty()) {
+            // 如果没有提供项目名称，使用文件名
+            String fileName = file.getOriginalFilename();
+            if (fileName != null && fileName.endsWith(".pdf")) {
+                projectName = fileName.substring(0, fileName.length() - 4);
+            } else {
+                projectName = "未命名项目";
+            }
+        }
+
+        try {
+            // 调用AI服务将PDF转换为LaTeX
+            PdfToLatexResponse pdfResponse = aiService.convertPdfToLatex(file);
+            
+            if (pdfResponse.getErrorMessage() != null && !pdfResponse.getErrorMessage().isEmpty()) {
+                return ResponseResult.error(500, "PDF转换失败: " + pdfResponse.getErrorMessage());
+            }
+
+            String latexContent = pdfResponse.getLatexContent();
+            if (latexContent == null || latexContent.trim().isEmpty()) {
+                return ResponseResult.error(500, "PDF转换失败：未生成LaTeX内容");
+            }
+
+            // 创建项目
+            ProjectDTO projectDTO = new ProjectDTO();
+            projectDTO.setUserId(userId);
+            projectDTO.setName(projectName.trim());
+            projectDTO.setContent(latexContent);
+
+            ProjectDTO created = projectService.createProject(projectDTO);
+            return ResponseResult.success("项目创建成功", created);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseResult.error(500, "创建项目失败: " + e.getMessage());
         }
     }
 }

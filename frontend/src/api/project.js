@@ -90,3 +90,22 @@ export function compileProject(id, compiler = 'pdflatex') {
   })
 }
 
+/**
+ * 从PDF文件创建项目
+ * @param {File} file - PDF文件
+ * @param {String} projectName - 项目名称
+ * @returns {Promise}
+ */
+export function createProjectFromPdf(file, projectName) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('name', projectName)
+  
+  return request({
+    url: '/projects/from-pdf',
+    method: 'post',
+    data: formData,
+    timeout: 120000 // 文件上传和AI处理可能需要更长时间，设置为120秒
+  })
+}
+

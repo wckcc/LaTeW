@@ -88,6 +88,7 @@ src/main/java/org/example/
 - ✅ Word格式导出（.docx）
 - ✅ PDF格式导出
 - ✅ LaTeX格式文件导入（支持AI优化）
+- ✅ PDF文件导入（使用DeepSeek AI自动识别并转换为LaTeX）
 
 **API接口**:
 - `GET /api/editor/{documentId}/export/latex` - 导出为LaTeX
@@ -113,12 +114,12 @@ src/main/java/org/example/
 - ✅ 排版优化：使用AI优化LaTeX代码结构
 - ✅ 语法修复：自动修复LaTeX语法错误
 - ✅ 文件导入时AI优化选项
+- ✅ PDF转LaTeX：使用DeepSeek AI自动识别PDF内容并转换为LaTeX代码
 
 **API接口**:
-- `POST /api/ai/analyze-error` - 分析错误
-- `POST /api/ai/optimize` - 优化LaTeX
-- `POST /api/ai/fix-syntax` - 修复语法错误
-- `POST /api/ai/process` - 通用AI处理
+- `POST /api/ai/pdf-to-latex` - 将PDF文件转换为LaTeX代码
+- `POST /api/ai/process` - 通用AI处理（错误分析、优化、语法修复等）
+- `POST /api/projects/from-pdf` - 从PDF文件创建项目（包含AI转换）
 
 ### 7. 模板系统
 - ✅ 提供多种学术论文模板
@@ -198,7 +199,7 @@ src/main/java/org/example/
 {
   "code": 200,
   "message": "操作成功",
-  "data": { ... }
+  "data": {"...": "..."}
 }
 ```
 
@@ -239,7 +240,9 @@ src/main/java/org/example/
 ### 配置说明
 1. 配置数据库连接（application.yml）
 2. 配置LaTeX编译器路径
-3. 配置AI API密钥（如需要）
+3. 配置DeepSeek API密钥（application.yml或环境变量DEEPSEEK_API_KEY）
+   - 在application.yml中配置：`deepseek.api.api-key: your-api-key-here`
+   - 或通过环境变量：`export DEEPSEEK_API_KEY=your-api-key-here`
 
 ### 运行方式
 ```bash

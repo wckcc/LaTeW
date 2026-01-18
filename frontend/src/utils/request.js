@@ -15,6 +15,10 @@ request.interceptors.request.use(
     if (token) {
       config.headers.token = token
     }
+    // 如果是FormData，让axios自动设置Content-Type（包括boundary）
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    }
     return config
   },
   error => {

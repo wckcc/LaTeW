@@ -123,7 +123,11 @@
           <div class="file-name">
             <span>📄</span>
             <span>{{ selectedFile.name }}</span>
+            <span class="file-size">({{ formatFileSize(selectedFile.size) }})</span>
             <button class="remove-file" @click="removeFile">×</button>
+          </div>
+          <div class="file-hint">
+            <p>💡 提示：系统将使用AI自动识别PDF内容并转换为LaTeX文档</p>
           </div>
         </div>
       </div>
@@ -148,7 +152,7 @@
           :disabled="!canCreate"
           @click="handleCreate"
         >
-          {{ creating ? '创建中...' : '创建' }}
+          {{ creating ? (selectedOption === 'import' ? 'AI识别中...' : '创建中...') : '创建' }}
         </button>
       </div>
     </div>
@@ -156,7 +160,7 @@
 </template>
 
 <script>
-import { createProject } from '../api/project'
+import { createProject, createProjectFromPdf } from '../api/project'
 import { getAllTemplates, getTemplatesByCategory } from '../api/template'
 import { getUser } from '../utils/auth'
 
@@ -284,6 +288,13 @@ export default {
       const cat = this.categories.find(c => c.value === category)
       return cat ? cat.label : category
     },
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes'
+      const k = 1024
+      const sizes = ['Bytes', 'KB', 'MB', 'GB']
+      const i = Math.floor(Math.log(bytes) / Math.log(k))
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+    },
     async handleCreate() {
       if (!this.canCreate || this.creating) return
       
@@ -307,10 +318,30 @@ export default {
           // 使用模板创建项目
           projectContent = this.selectedTemplate.content || '\\documentclass{article}\n\\begin{document}\n\n\\end{document}'
         } else if (this.selectedOption === 'import') {
-          // 导入PDF文件
-          // 注意：这里需要后端支持PDF导入，目前先提示
-          alert('PDF导入功能正在开发中，请先使用空白项目或模板')
-          this.creating = false
+          // 导入PDF文件，使用AI识别并转换为LaTeX
+          if (!this.selectedFile) {
+            alert('请先选择PDF文件')
+            this.creating = false
+            return
+          }
+          
+          try {
+            // 调用API从PDF创建项目
+            const response = await createProjectFromPdf(this.selectedFile, this.projectName)
+            
+            if (response.data && response.data.id) {
+              projectId = response.data.id
+              // 跳转到项目列表
+              this.$router.push('/projects')
+            } else {
+              alert('创建项目失败：未返回项目ID')
+            }
+          } catch (error) {
+            console.error('从PDF创建项目失败:', error)
+            alert('从PDF创建项目失败: ' + (error.message || '未知错误'))
+          } finally {
+            this.creating = false
+          }
           return
         }
         
@@ -645,6 +676,26 @@ export default {
   gap: 10px;
   font-size: 14px;
   color: #333;
+}
+
+.file-size {
+  color: #999;
+  font-size: 12px;
+}
+
+.file-hint {
+  margin-top: 12px;
+  padding: 12px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  border-left: 3px solid #2196f3;
+}
+
+.file-hint p {
+  margin: 0;
+  font-size: 13px;
+  color: #1976d2;
+  line-height: 1.5;
 }
 
 .remove-file {
