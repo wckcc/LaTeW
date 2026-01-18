@@ -55,10 +55,12 @@ export function getAllProjects() {
  * @returns {Promise}
  */
 export function updateProject(id, projectData) {
+  // 将项目ID添加到请求数据中
+  const data = { ...projectData, id }
   return request({
-    url: `/projects/${id}`,
+    url: '/projects',
     method: 'put',
-    data: projectData
+    data: data
   })
 }
 
@@ -71,6 +73,20 @@ export function deleteProject(id) {
   return request({
     url: `/projects/${id}`,
     method: 'delete'
+  })
+}
+
+/**
+ * 编译项目为PDF
+ * @param {Number} id - 项目ID
+ * @param {String} compiler - 编译器类型（pdflatex, xelatex, lualatex）
+ * @returns {Promise}
+ */
+export function compileProject(id, compiler = 'pdflatex') {
+  return request({
+    url: `/projects/${id}/compile`,
+    method: 'post',
+    data: { compiler }
   })
 }
 

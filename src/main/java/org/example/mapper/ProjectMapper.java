@@ -23,5 +23,19 @@ public interface ProjectMapper {
      * @return 项目列表
      */
     List<ProjectDTO> selectByUserId(Long userId);
+    
+    /**
+     * 根据项目ID查询项目
+     * @param id 项目ID
+     * @return 项目信息
+     */
+    ProjectDTO selectById(Long id);
+
+    /**
+     * 根据项目ID更新项目
+     * @param projectDTO 项目数据
+     * @return 影响行数
+     */
+    int updateById(ProjectDTO projectDTO);
 }
 

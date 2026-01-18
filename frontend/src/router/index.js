@@ -3,8 +3,8 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Projects from '../views/Projects.vue'
 import NewProject from '../views/NewProject.vue'
+import Editor from '../views/Editor.vue'
 import { getToken } from '../utils/auth'
-
 const routes = [
   {
     path: '/',
@@ -30,6 +30,12 @@ const routes = [
     path: '/new-project',
     name: 'NewProject',
     component: NewProject,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/editor/:id',
+    name: 'Editor',
+    component: Editor,
     meta: { requiresAuth: true }
   }
 ]

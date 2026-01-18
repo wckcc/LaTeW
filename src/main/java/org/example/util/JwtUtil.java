@@ -22,8 +22,8 @@ public class JwtUtil {
     @Value("${jwt.secret:latew-secret-key}")
     private String secret;
 
-    @Value("${jwt.expiration:86400000}")
-    private Long expiration; // 默认24小时，单位：毫秒
+    @Value("${jwt.expiration:1800000}")
+    private Long expiration; // 默认半小时，单位：毫秒
 
     /**
      * 生成JWT令牌

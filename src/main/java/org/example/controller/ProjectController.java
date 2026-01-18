@@ -1,12 +1,15 @@
 package org.example.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.example.dto.CompileRequest;
+import org.example.dto.CompileResult;
 import org.example.dto.ProjectDTO;
 import org.example.dto.ResponseResult;
 import org.example.service.ProjectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -44,9 +47,128 @@ public class ProjectController {
      * GET /api/projects/user/{userId}
      */
     @GetMapping("/user/{userId}")
-    public ResponseResult<List<ProjectDTO>> getProjectsByUser(@PathVariable Long userId) {
+    public ResponseResult<List<ProjectDTO>> getProjectsByUser(@PathVariable Long userId, HttpServletRequest request) {
+        // 从请求中获取当前登录用户的ID（由JWT拦截器设置）
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        
+        // 确保用户只能查询自己的项目列表
+        if (!currentUserId.equals(userId)) {
+            return ResponseResult.error(403, "没有权限访问该项目列表");
+        }
+        
         List<ProjectDTO> projects = projectService.getProjectsByUserId(userId);
         return ResponseResult.success("查询成功", projects);
     }
+    
+    /**
+     * 根据项目ID查询项目
+     * GET /api/projects/{id}
+     */
+    @GetMapping("/{id}")
+    public ResponseResult<ProjectDTO> getProjectById(@PathVariable Long id, HttpServletRequest request) {
+        // 从请求中获取当前登录用户的ID（由JWT拦截器设置）
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseResult.error(404, "项目不存在");
+        }
+        
+        // 检查用户权限，确保用户只能访问自己创建的项目
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseResult.error(403, "没有权限访问该项目");
+        }
+        
+        return ResponseResult.success("查询成功", project);
+    }
+    
+    /**
+     * 更新项目内容
+     * PUT /api/projects
+     */
+    @PutMapping
+    public ResponseResult<ProjectDTO> updateProjectContent(@RequestBody ProjectDTO projectDTO, HttpServletRequest request) {
+        // 从请求中获取当前登录用户的ID（由JWT拦截器设置）
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        
+        // 检查项目ID是否存在
+        if (projectDTO.getId() == null) {
+            return ResponseResult.error(400, "项目ID不能为空");
+        }
+        
+        // 检查项目是否存在
+        ProjectDTO existingProject = projectService.getProjectById(projectDTO.getId());
+        if (existingProject == null) {
+            return ResponseResult.error(404, "项目不存在");
+        }
+        
+        // 检查用户权限，确保用户只能更新自己创建的项目
+        if (!existingProject.getUserId().equals(currentUserId)) {
+            return ResponseResult.error(403, "没有权限更新该项目");
+        }
+        
+        // 更新项目内容
+        projectDTO.setUserId(currentUserId); // 确保使用当前用户ID
+        ProjectDTO updatedProject = projectService.updateProjectById(projectDTO);
+        
+        return ResponseResult.success("项目内容更新成功", updatedProject);
+    }
+    
+    /**
+     * 编译项目为PDF
+     * POST /api/projects/{id}/compile
+     */
+    @PostMapping("/{id}/compile")
+    public ResponseResult<CompileResult> compileProject(
+            @PathVariable Long id,
+            @RequestBody(required = false) CompileRequest compileRequest,
+            HttpServletRequest request) {
+        // 从请求中获取当前登录用户的ID（由JWT拦截器设置）
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        
+        // 检查项目是否存在
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseResult.error(404, "项目不存在");
+        }
+        
+        // 检查用户权限，确保用户只能编译自己创建的项目
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseResult.error(403, "没有权限编译该项目");
+        }
+        
+        // 获取编译器类型（默认为pdflatex）
+        String compiler = compileRequest != null && compileRequest.getCompiler() != null 
+            ? compileRequest.getCompiler() 
+            : "pdflatex";
+        
+        try {
+            CompileResult result = projectService.compileProject(id, compiler);
+            // 统一返回成功，编译结果状态在 CompileResult 中体现
+            String message = "SUCCESS".equals(result.getStatus()) ? "编译成功" : "编译完成";
+            return ResponseResult.success(message, result);
+        } catch (Exception e) {
+            // 捕获异常时，创建错误结果
+            CompileResult errorResult = new CompileResult();
+            errorResult.setStatus("ERROR");
+            errorResult.setErrorMessage("编译失败: " + e.getMessage());
+            errorResult.setCreatedAt(LocalDateTime.now());
+            return ResponseResult.success("编译失败", errorResult);
+        }
+    }
 }
+
+
 

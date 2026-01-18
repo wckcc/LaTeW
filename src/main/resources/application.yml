@@ -25,3 +25,11 @@ jwt:
   secret: latew-secret-key-2024-very-long-secret-key-for-security
   expiration: 86400000  # 24小时，单位：毫秒
 
+# LaTeX编译配置
+latex:
+  compile:
+    temp-dir: ./temp/compile  # 临时编译目录
+    output-dir: ./static/pdf  # PDF输出目录
+    pdflatex-path: pdflatex   # pdflatex命令路径（如果不在PATH中，请指定完整路径，如：C:/texlive/2024/bin/windows/pdflatex.exe）
+    timeout: 30               # 编译超时时间（秒）
+

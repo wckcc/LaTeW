@@ -42,6 +42,29 @@
         WHERE user_id = #{userId, jdbcType=BIGINT}
         ORDER BY updated_at DESC, created_at DESC
     </select>
+    
+    <!-- 根据项目ID查询项目 -->
+    <select id="selectById" parameterType="java.lang.Long" resultMap="BaseResultMap">
+        SELECT 
+            id,
+            name,
+            content,
+            user_id,
+            created_at,
+            updated_at
+        FROM projects
+        WHERE id = #{id, jdbcType=BIGINT}
+    </select>
+
+    <!-- 根据项目ID更新项目 -->
+    <update id="updateById" parameterType="org.example.dto.ProjectDTO">
+        UPDATE projects
+        SET 
+            name = #{name, jdbcType=VARCHAR},
+            content = #{content, jdbcType=LONGVARCHAR},
+            updated_at = #{updatedAt, jdbcType=TIMESTAMP}
+        WHERE id = #{id, jdbcType=BIGINT}
+    </update>
 
 </mapper>
 

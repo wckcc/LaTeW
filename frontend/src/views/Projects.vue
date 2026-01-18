@@ -130,6 +130,7 @@
               v-else
               v-for="project in filteredProjects" 
               :key="project.id"
+              @dblclick="openProject(project.id)"
             >
               <td>
                 <input 
@@ -250,26 +251,32 @@ export default {
     async loadProjects() {
       this.loading = true
       try {
-        // 根据当前视图加载不同的项目列表
-        if (this.activeView === 'mine') {
-          const user = getUser()
-          if (user && user.userId) {
-            const response = await getProjectsByUser(user.userId)
-            if (response.data) {
-              this.projects = response.data
-            }
-          }
-        } else {
-          // 加载所有项目
-          const response = await getAllProjects()
-          if (response.data) {
-            this.projects = response.data
-          }
+        // 获取当前用户
+        const user = getUser()
+        if (!user || !user.userId) {
+          // 用户未登录，跳转到登录页面
+          this.$router.push('/login')
+          return
+        }
+        
+        // 加载当前用户的项目
+        const response = await getProjectsByUser(user.userId)
+        if (response.data) {
+          this.projects = response.data
         }
       } catch (error) {
         console.error('加载项目失败:', error)
         this.projects = []
-        alert('加载项目失败: ' + (error.message || '未知错误'))
+        
+        // 根据错误类型显示不同的提示
+        if (error.message.includes('未登录')) {
+          alert('请先登录后再访问项目列表')
+          this.$router.push('/login')
+        } else if (error.message.includes('权限')) {
+          alert('没有权限访问该项目列表')
+        } else {
+          alert('加载项目失败: ' + (error.message || '未知错误'))
+        }
       } finally {
         this.loading = false
       }
@@ -664,7 +671,7 @@ export default {
 .projects-table td {
   padding: 12px;
   border-bottom: 1px solid #f0f0f0;
-  font-size: 14px;
+  font-size: 15px;
   color: #333;
 }
 
@@ -673,13 +680,15 @@ export default {
 }
 
 .project-title span {
-  color: #4caf50;
+  font-size: 15px;
+  color: #000;
   cursor: pointer;
   text-decoration: none;
+  transition: color 0.2s;
 }
 
 .project-title span:hover {
-  text-decoration: underline;
+  color: #4caf50;
 }
 
 .actions-cell {
