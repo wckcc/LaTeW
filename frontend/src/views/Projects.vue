@@ -57,33 +57,10 @@
       <div class="content-header">
         <h1>{{ getViewTitle() }}</h1>
         <div class="header-actions">
-          <div class="user-avatar-container" @click="toggleUserMenu">
-            <div class="user-avatar">
-              {{ getUserInitial() }}
-            </div>
-            <div v-if="showUserMenu" class="user-menu" @click.stop>
-              <div class="user-menu-header">
-                <div class="user-menu-avatar">{{ getUserInitial() }}</div>
-                <div class="user-menu-info">
-                  <div class="user-menu-name">{{ currentUser?.username || '用户' }}</div>
-                  <div class="user-menu-id">ID: {{ currentUser?.userId || '-' }}</div>
-                </div>
-              </div>
-              <div class="user-menu-divider"></div>
-              <div class="user-menu-body">
-                <div class="user-menu-item">
-                  <span class="menu-item-label">用户名:</span>
-                  <span class="menu-item-value">{{ currentUser?.username || '-' }}</span>
-                </div>
-                <div class="user-menu-item">
-                  <span class="menu-item-label">用户ID:</span>
-                  <span class="menu-item-value">{{ currentUser?.userId || '-' }}</span>
-                </div>
-              </div>
-              <div class="user-menu-divider"></div>
-              <div class="user-menu-footer">
-                <button class="logout-btn" @click="handleLogout">退出登录</button>
-              </div>
+          <div class="user-avatar-container">
+            <div class="user-avatar" @click="goToProfile" title="个人中心">
+              <img v-if="userAvatar" :src="userAvatar" alt="头像" class="avatar-img" />
+              <span v-else>{{ getUserInitial() }}</span>
             </div>
           </div>
         </div>
@@ -190,7 +167,8 @@
 
 <script>
 import { getAllProjects, getProjectsByUser, deleteProject as deleteProjectAPI } from '../api/project'
-import { getUser, clearAuth } from '../utils/auth'
+import { getUserById } from '../api/user'
+import { getUser, setUser } from '../utils/auth'
 
 export default {
   name: 'Projects',
@@ -202,8 +180,8 @@ export default {
       searchQuery: '',
       selectedProjects: [],
       selectAll: false,
-      showUserMenu: false,
-      currentUser: null
+      currentUser: null,
+      userAvatar: ''
     }
   },
   computed: {
@@ -241,11 +219,7 @@ export default {
   mounted() {
     this.loadProjects()
     this.currentUser = getUser()
-    // 点击外部关闭菜单
-    document.addEventListener('click', this.handleClickOutside)
-  },
-  beforeUnmount() {
-    document.removeEventListener('click', this.handleClickOutside)
+    this.loadUserAvatar()
   },
   methods: {
     async loadProjects() {
@@ -354,20 +328,6 @@ export default {
         return `${years} 年前`
       }
     },
-    toggleUserMenu() {
-      this.showUserMenu = !this.showUserMenu
-      if (this.showUserMenu) {
-        // 打开菜单时刷新用户信息
-        this.currentUser = getUser()
-      }
-    },
-    handleClickOutside(event) {
-      const userMenu = this.$el.querySelector('.user-menu')
-      const avatar = this.$el.querySelector('.user-avatar-container')
-      if (this.showUserMenu && userMenu && avatar && !avatar.contains(event.target)) {
-        this.showUserMenu = false
-      }
-    },
     getUserInitial() {
       const user = this.currentUser || getUser()
       if (user && user.username) {
@@ -375,11 +335,32 @@ export default {
       }
       return 'U'
     },
-    handleLogout() {
-      if (confirm('确定要退出登录吗？')) {
-        clearAuth()
-        this.$router.push('/login')
+    async loadUserAvatar() {
+      const user = getUser()
+      if (user && user.userId) {
+        // 先检查本地缓存
+        if (user.avatar) {
+          this.userAvatar = user.avatar
+        }
+        // 从服务器获取最新头像
+        try {
+          const res = await getUserById(user.userId)
+          if (res.data && res.data.avatar) {
+            this.userAvatar = res.data.avatar
+            // 更新本地缓存
+            setUser({
+              ...user,
+              avatar: res.data.avatar
+            })
+          }
+        } catch (error) {
+          console.error('获取用户头像失败:', error)
+        }
       }
+    },
+    goToProfile() {
+      this.showUserMenu = false
+      this.$router.push('/profile')
     }
   }
 }
@@ -505,7 +486,6 @@ export default {
 
 .user-avatar-container {
   position: relative;
-  cursor: pointer;
 }
 
 .user-avatar {
@@ -519,106 +499,20 @@ export default {
   justify-content: center;
   font-size: 18px;
   font-weight: 500;
-  transition: transform 0.2s;
-}
-
-.user-avatar:hover {
-  transform: scale(1.05);
-}
-
-.user-menu {
-  position: absolute;
-  top: 50px;
-  right: 0;
-  width: 280px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
   overflow: hidden;
 }
 
-.user-menu-header {
-  display: flex;
-  align-items: center;
-  padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+.user-avatar:hover {
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
 }
 
-.user-menu-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  font-weight: 500;
-  margin-right: 12px;
-}
-
-.user-menu-info {
-  flex: 1;
-}
-
-.user-menu-name {
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.user-menu-id {
-  font-size: 12px;
-  opacity: 0.9;
-}
-
-.user-menu-divider {
-  height: 1px;
-  background: #e0e0e0;
-  margin: 0;
-}
-
-.user-menu-body {
-  padding: 16px 20px;
-}
-
-.user-menu-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  font-size: 14px;
-}
-
-.menu-item-label {
-  color: #666;
-}
-
-.menu-item-value {
-  color: #333;
-  font-weight: 500;
-}
-
-.user-menu-footer {
-  padding: 12px 20px;
-  background: #f9f9f9;
-}
-
-.logout-btn {
+.avatar-img {
   width: 100%;
-  padding: 10px;
-  background-color: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background-color 0.3s;
-}
-
-.logout-btn:hover {
-  background-color: #c0392b;
+  height: 100%;
+  object-fit: cover;
 }
 
 .search-bar {

@@ -3,8 +3,7 @@ package org.example.service;
 import org.example.dto.UserDTO;
 import org.example.dto.UserLoginDTO;
 import org.example.vo.UserLoginVO;
-
-import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 用户服务接口
@@ -16,11 +15,36 @@ public interface UserService {
     UserDTO createUser(UserDTO userDTO);
 
     /**
+     * 生成并发送邮箱验证码（验证码会写入 Redis，用于后续注册/登录校验）
+     *
+     * @param email 邮箱
+     * @return 成功消息
+     */
+    String sendEmailCode(String email);
+
+    /**
      * 用户登录
      *
      * @param loginDTO 登录信息
      * @return 登录响应（包含token）
      */
     UserLoginVO login(UserLoginDTO loginDTO);
+
+    /**
+     * 上传用户头像
+     *
+     * @param userId 用户ID
+     * @param file   头像文件
+     * @return 头像访问URL
+     */
+    String uploadAvatar(Long userId, MultipartFile file);
+
+    /**
+     * 获取用户信息
+     *
+     * @param userId 用户ID
+     * @return 用户信息
+     */
+    UserDTO getUserById(Long userId);
 }
 

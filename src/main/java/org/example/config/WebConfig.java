@@ -20,10 +20,14 @@ import java.nio.file.Paths;
 public class WebConfig implements WebMvcConfigurer {
 
     @Autowired
+    @NonNull
     private JwtInterceptor jwtInterceptor;
     
     @Value("${latex.compile.output-dir:./static/pdf}")
     private String pdfOutputDir;
+    
+    @Value("${avatar.upload.path:./static/avatars}")
+    private String avatarUploadPath;
 
     /**
      * 添加拦截器
@@ -35,7 +39,9 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/api/users/login",      // 登录接口
                         "/api/users",            // 注册接口（创建用户）
+                        "/api/users/email/**", // 邮箱验证码接口
                         "/api/pdf/**",           // PDF静态资源
+                        "/api/avatars/**",       // 头像静态资源
                         "/error",                // 错误页面
                         "/swagger-ui/**",        // Swagger UI（如果使用）
                         "/v3/api-docs/**"        // Swagger文档（如果使用）
@@ -56,13 +62,19 @@ public class WebConfig implements WebMvcConfigurer {
     
     /**
      * 静态资源映射
-     * 配置PDF文件的访问路径
+     * 配置PDF文件和头像文件的访问路径
      */
     @Override
     public void addResourceHandlers(@NonNull ResourceHandlerRegistry registry) {
+        // PDF文件映射
         String pdfPath = Paths.get(pdfOutputDir).toAbsolutePath().toString().replace("\\", "/");
         registry.addResourceHandler("/api/pdf/**")
                 .addResourceLocations("file:" + pdfPath + "/");
+        
+        // 头像文件映射
+        String avatarPath = Paths.get(avatarUploadPath).toAbsolutePath().toString().replace("\\", "/");
+        registry.addResourceHandler("/api/avatars/**")
+                .addResourceLocations("file:" + avatarPath + "/");
     }
 }
 

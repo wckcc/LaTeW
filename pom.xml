@@ -30,6 +30,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- Redis - 数据缓存/连接 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
         <!-- Spring Boot Validation - 参数验证 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -103,6 +109,12 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Spring Security Crypto - 密码加密 -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <!-- JWT依赖 -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -120,6 +132,12 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>0.12.3</version>
             <scope>runtime</scope>
+        </dependency>
+        
+        <!-- Spring Boot Mail - 邮件发送 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
     </dependencies>
 

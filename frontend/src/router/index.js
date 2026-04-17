@@ -4,6 +4,7 @@ import Register from '../views/Register.vue'
 import Projects from '../views/Projects.vue'
 import NewProject from '../views/NewProject.vue'
 import Editor from '../views/Editor.vue'
+import Profile from '../views/Profile.vue'
 import { getToken } from '../utils/auth'
 const routes = [
   {
@@ -36,6 +37,12 @@ const routes = [
     path: '/editor/:id',
     name: 'Editor',
     component: Editor,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'Profile',
+    component: Profile,
     meta: { requiresAuth: true }
   }
 ]

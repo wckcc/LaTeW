@@ -1,5 +1,6 @@
 package org.example.controller;
 
+import org.example.dto.EmailSendCodeDTO;
 import org.example.dto.ResponseResult;
 import org.example.dto.UserDTO;
 import org.example.dto.UserLoginDTO;
@@ -7,8 +8,7 @@ import org.example.service.UserService;
 import org.example.vo.UserLoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 用户管理控制器
@@ -21,6 +21,21 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    /**
+     * 发送邮箱验证码
+     * POST /api/users/email/send-code
+     */
+    @PostMapping("/email/send-code")
+    public ResponseResult<String> sendEmailCode(@RequestBody EmailSendCodeDTO dto) {
+        try {
+            String code = userService.sendEmailCode(dto.getEmail());
+            // 前端调试场景：返回验证码明文，正式环境建议改为仅发邮件/不回传
+            return ResponseResult.success("验证码已生成", code);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(400, e.getMessage());
+        }
+    }
 
     /**
      * 创建用户
@@ -43,6 +58,38 @@ public class UserController {
             return ResponseResult.success("登录成功", result);
         } catch (RuntimeException e) {
             return ResponseResult.error(401, e.getMessage());
+        }
+    }
+
+    /**
+     * 上传用户头像
+     * POST /api/users/{userId}/avatar
+     */
+    @PostMapping("/{userId}/avatar")
+    public ResponseResult<String> uploadAvatar(
+            @PathVariable Long userId,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            String avatarUrl = userService.uploadAvatar(userId, file);
+            return ResponseResult.success("头像上传成功", avatarUrl);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 获取用户信息
+     * GET /api/users/{userId}
+     */
+    @GetMapping("/{userId}")
+    public ResponseResult<UserDTO> getUserById(@PathVariable Long userId) {
+        try {
+            UserDTO user = userService.getUserById(userId);
+            // 不返回密码
+            user.setPassword(null);
+            return ResponseResult.success(user);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(404, e.getMessage());
         }
     }
 

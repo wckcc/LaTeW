@@ -13,6 +13,29 @@ spring:
       max-request-size: 50MB  # 请求最大大小
       file-size-threshold: 2KB  # 文件写入磁盘的阈值
 
+  # Redis 配置
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: 518518
+      database: 0
+  
+  # 邮件发送配置
+  mail:
+    host: smtp.qq.com  # SMTP服务器地址，根据邮件提供商修改
+    port: 587  # SMTP服务器端口
+    username: 691854351@qq.com  # 发送邮件的邮箱
+    password: mkqdyfbhbhwmbcbd  # 邮箱密码或授权码
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          nickname: LaTeW  # 邮件发送者昵称
+
 # MyBatis配置
 mybatis:
   # Mapper XML文件位置
@@ -31,6 +54,13 @@ server:
 jwt:
   secret: latew-secret-key-2024-very-long-secret-key-for-security
   expiration: 86400000  # 24小时，单位：毫秒
+
+# 头像上传配置
+avatar:
+  upload:
+    path: ./static/avatars  # 头像存储目录
+    max-size: 5MB           # 最大文件大小
+    allowed-types: image/jpeg,image/png,image/gif,image/webp  # 允许的文件类型
 
 # LaTeX编译配置
 latex:

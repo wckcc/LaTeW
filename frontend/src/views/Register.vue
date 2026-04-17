@@ -8,30 +8,39 @@
       
       <form @submit.prevent="handleRegister" class="register-form">
         <div class="form-group">
-          <label for="username">用户名 <span class="required">*</span></label>
+          <label for="email">邮箱</label>
           <input
-            id="username"
-            v-model="form.username"
-            type="text"
-            placeholder="请输入用户名"
-            required
+            id="email"
+            v-model="form.email"
+            type="email"
+            placeholder="请输入邮箱"
             :disabled="loading"
+            required
           />
         </div>
         
         <div class="form-group">
-          <label for="phone">手机号</label>
-          <input
-            id="phone"
-            v-model="form.phone"
-            type="tel"
-            placeholder="请输入手机号（可选）"
-            :disabled="loading"
-          />
-        </div>
-        
-        <div class="form-info">
-          <p>提示：密码默认为 <strong>123456</strong>，登录后可修改</p>
+          <label for="code">验证码</label>
+          <div class="code-input-wrapper">
+            <input
+              id="code"
+              v-model="form.code"
+              type="text"
+              inputmode="numeric"
+              placeholder="请输入6位验证码"
+              :disabled="loading || sendingCode"
+              required
+            />
+            <button
+              type="button"
+              class="code-send-btn"
+              @click="handleSendCode"
+              :disabled="loading || sendingCode"
+              tabindex="-1"
+            >
+              {{ sendingCode ? '发送中...' : '发送验证码' }}
+            </button>
+          </div>
         </div>
         
         <div v-if="errorMessage" class="error-message">
@@ -56,36 +65,55 @@
 </template>
 
 <script>
-import { createUser } from '../api/user'
+import { createUser, sendEmailCode } from '../api/user'
 
 export default {
   name: 'Register',
   data() {
     return {
       form: {
-        username: '',
-        phone: ''
+        email: '',
+        code: ''
       },
       loading: false,
+      sendingCode: false,
       errorMessage: '',
       successMessage: ''
     }
   },
   methods: {
+    async handleSendCode() {
+      this.errorMessage = ''
+      this.successMessage = ''
+
+      const email = this.form.email.trim()
+      if (!email) {
+        this.errorMessage = '请输入邮箱'
+        return
+      }
+
+      this.sendingCode = true
+      try {
+        await sendEmailCode(email)
+        this.successMessage = '验证码已发送至您的邮箱，请查收'
+      } catch (error) {
+        this.errorMessage = error.message || '发送验证码失败'
+      } finally {
+        this.sendingCode = false
+      }
+    },
     async handleRegister() {
       // 清除之前的消息
       this.errorMessage = ''
       this.successMessage = ''
       
       // 表单验证
-      if (!this.form.username.trim()) {
-        this.errorMessage = '请输入用户名'
+      if (!this.form.email.trim()) {
+        this.errorMessage = '请输入邮箱'
         return
       }
-      
-      // 手机号验证（如果填写了）
-      if (this.form.phone && !/^1[3-9]\d{9}$/.test(this.form.phone)) {
-        this.errorMessage = '请输入正确的手机号'
+      if (!this.form.code.trim()) {
+        this.errorMessage = '请输入验证码'
         return
       }
       
@@ -93,23 +121,19 @@ export default {
       
       try {
         const userData = {
-          username: this.form.username.trim()
-        }
-        
-        // 如果填写了手机号，则添加到请求数据中
-        if (this.form.phone.trim()) {
-          userData.phone = this.form.phone.trim()
+          email: this.form.email.trim(),
+          code: this.form.code.trim()
         }
         
         const response = await createUser(userData)
         
         // 注册成功
-        this.successMessage = '注册成功！默认密码为 123456，请前往登录页面登录'
+        this.successMessage = '注册成功！请前往登录页面，使用邮箱和密码登录（默认密码123456）'
         
         // 清空表单
         this.form = {
-          username: '',
-          phone: ''
+          email: '',
+          code: ''
         }
         
         // 3秒后跳转到登录页面
@@ -180,10 +204,6 @@ export default {
   font-weight: 500;
 }
 
-.required {
-  color: #e74c3c;
-}
-
 .form-group input {
   width: 100%;
   padding: 12px 16px;
@@ -242,6 +262,33 @@ export default {
   background-color: #d4edda;
   border-radius: 6px;
   border: 1px solid #c3e6cb;
+}
+
+.code-input-wrapper {
+  position: relative;
+  display: flex;
+  gap: 10px;
+}
+
+.code-input-wrapper input {
+  flex: 1;
+}
+
+.code-send-btn {
+  flex: 0 0 auto;
+  background: #f0f3ff;
+  border: 1px solid #d5d9ff;
+  color: #4b5bd6;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 44px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.code-send-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .submit-btn {

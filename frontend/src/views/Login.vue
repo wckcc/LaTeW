@@ -8,12 +8,12 @@
       
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
-          <label for="username">用户名</label>
+          <label for="email">邮箱</label>
           <input
-            id="username"
-            v-model="form.username"
-            type="text"
-            placeholder="请输入用户名"
+            id="email"
+            v-model="form.email"
+            type="email"
+            placeholder="请输入邮箱"
             required
             :disabled="loading"
           />
@@ -21,26 +21,14 @@
         
         <div class="form-group">
           <label for="password">密码</label>
-          <div class="password-input-wrapper">
-            <input
-              id="password"
-              v-model="form.password"
-              :type="showPassword ? 'text' : 'password'"
-              placeholder="请输入密码"
-              required
-              :disabled="loading"
-            />
-            <button
-              type="button"
-              class="password-toggle"
-              @click="togglePasswordVisibility"
-              :disabled="loading"
-              tabindex="-1"
-            >
-              <span v-if="showPassword" class="icon">👁️</span>
-              <span v-else class="icon">👁️‍🗨️</span>
-            </button>
-          </div>
+          <input
+            id="password"
+            v-model="form.password"
+            type="password"
+            placeholder="请输入密码（默认123456）"
+            required
+            :disabled="loading"
+          />
         </div>
         
         <div v-if="errorMessage" class="error-message">
@@ -69,12 +57,11 @@ export default {
   data() {
     return {
       form: {
-        username: '',
+        email: '',
         password: ''
       },
       loading: false,
-      errorMessage: '',
-      showPassword: false
+      errorMessage: ''
     }
   },
   methods: {
@@ -83,8 +70,8 @@ export default {
       this.errorMessage = ''
       
       // 表单验证
-      if (!this.form.username.trim()) {
-        this.errorMessage = '请输入用户名'
+      if (!this.form.email.trim()) {
+        this.errorMessage = '请输入邮箱'
         return
       }
       if (!this.form.password.trim()) {
@@ -96,29 +83,26 @@ export default {
       
       try {
         const response = await login({
-          username: this.form.username.trim(),
-          password: this.form.password
+          email: this.form.email.trim(),
+          password: this.form.password.trim()
         })
         
-          // 保存token和用户信息
+        // 保存token和用户信息
         if (response.data) {
           setToken(response.data.token)
           setUser({
             userId: response.data.userId,
             username: response.data.username
           })
-          
+
           // 登录成功，跳转到项目管理页面
           this.$router.push('/projects')
         }
       } catch (error) {
-        this.errorMessage = error.message || '登录失败，请检查用户名和密码'
+        this.errorMessage = error.message || '登录失败，请检查邮箱和密码'
       } finally {
         this.loading = false
       }
-    },
-    togglePasswordVisibility() {
-      this.showPassword = !this.showPassword
     }
   }
 }
@@ -188,43 +172,32 @@ export default {
   box-sizing: border-box;
 }
 
-.password-input-wrapper {
+.code-input-wrapper {
   position: relative;
-}
-
-.password-input-wrapper input {
-  padding-right: 45px;
-}
-
-.password-toggle {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 8px;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666;
-  font-size: 18px;
-  transition: color 0.2s;
+  gap: 10px;
 }
 
-.password-toggle:hover:not(:disabled) {
-  color: #667eea;
+.code-input-wrapper input {
+  flex: 1;
+  padding: 12px 14px;
 }
 
-.password-toggle:disabled {
+.code-send-btn {
+  flex: 0 0 auto;
+  background: #f0f3ff;
+  border: 1px solid #d5d9ff;
+  color: #4b5bd6;
+  border-radius: 8px;
+  padding: 0 12px;
+  height: 44px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.code-send-btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-}
-
-.password-toggle .icon {
-  display: inline-block;
-  user-select: none;
 }
 
 .form-group input:focus {
@@ -246,6 +219,16 @@ export default {
   background-color: #fee;
   border-radius: 6px;
   border: 1px solid #fcc;
+}
+
+.success-message {
+  color: #27ae60;
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding: 10px;
+  background-color: #d4edda;
+  border-radius: 6px;
+  border: 1px solid #c3e6cb;
 }
 
 .submit-btn {
