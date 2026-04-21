@@ -11,6 +11,13 @@ export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+// 判断当前是否为有效登录态（仅本地校验）
+export function isAuthenticated() {
+  const token = getToken()
+  const user = getUser()
+  return Boolean(token && user && user.userId)
+}
+
 // 移除token
 export function removeToken() {
   localStorage.removeItem(TOKEN_KEY)

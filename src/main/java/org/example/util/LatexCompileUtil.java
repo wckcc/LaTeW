@@ -8,7 +8,9 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -27,6 +29,12 @@ public class LatexCompileUtil {
 
     @Value("${latex.compile.pdflatex-path:pdflatex}")
     private String pdflatexPath;
+
+    @Value("${latex.compile.xelatex-path:xelatex}")
+    private String xelatexPath;
+
+    @Value("${latex.compile.lualatex-path:lualatex}")
+    private String lualatexPath;
 
     @Value("${latex.compile.timeout:30}")
     private int timeoutSeconds;
@@ -61,45 +69,36 @@ public class LatexCompileUtil {
             Files.write(texFile, latexContent.getBytes("UTF-8"));
             
             // 确定编译器命令
-            String compilerCommand = getCompilerCommand(compiler);
+            String normalizedCompiler = normalizeCompiler(compiler);
+            String compilerCommand = getCompilerCommand(normalizedCompiler);
             
-            // 执行编译命令
-            // 注意：由于已经设置了工作目录，不需要使用 -output-directory 参数
-            // 不使用 -halt-on-error，允许在有警告时继续编译（如图片文件缺失）
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                compilerCommand,
-                "-interaction=nonstopmode",
-                texFileName
-            );
-            
-            // 设置工作目录为临时目录（使用绝对路径的 File 对象）
-            processBuilder.directory(tempWorkDir.toAbsolutePath().toFile());
-            processBuilder.redirectErrorStream(true);
-            
-            Process process = processBuilder.start();
-            
-            // 读取编译输出
-            StringBuilder logOutput = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), "UTF-8"))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    logOutput.append(line).append("\n");
-                }
-            }
-            
-            // 等待进程完成，设置超时
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                throw new RuntimeException("编译超时（超过 " + timeoutSeconds + " 秒）");
-            }
-            
-            int exitCode = process.exitValue();
+            CompileExecutionResult execution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
+            StringBuilder logOutput = new StringBuilder(execution.logContent);
+            int exitCode = execution.exitCode;
             long compileTime = System.currentTimeMillis() - startTime;
             
             // 检查PDF是否生成（即使退出码不为0，如果PDF生成了也认为成功）
             Path pdfFile = tempWorkDir.resolve("main.pdf");
+            if (!Files.exists(pdfFile) && hasMissingGraphicsError(logOutput.toString())) {
+                // 图片缺失时自动降级重试：将 includegraphics 替换为占位框，保证可预览
+                String draftContent = buildMissingImageTolerantContent(latexContent);
+                Files.write(texFile, draftContent.getBytes("UTF-8"));
+                CompileExecutionResult retryExecution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
+                logOutput.append("\n[retry-with-graphicx-draft]\n").append(retryExecution.logContent);
+                exitCode = retryExecution.exitCode;
+            }
+
+            pdfFile = tempWorkDir.resolve("main.pdf");
+            if (!Files.exists(pdfFile) && "xelatex".equals(normalizedCompiler)) {
+                // 某些 XeLaTeX 环境会产出 XDV，需要额外转换为 PDF
+                Path xdvFile = tempWorkDir.resolve("main.xdv");
+                if (Files.exists(xdvFile)) {
+                    String xdvLog = convertXdvToPdf(tempWorkDir, xdvFile);
+                    if (xdvLog != null && !xdvLog.isEmpty()) {
+                        logOutput.append("\n[xdvipdfmx]\n").append(xdvLog).append("\n");
+                    }
+                }
+            }
             CompileResult result = new CompileResult();
             result.setCompileTimeMs(compileTime);
             result.setLogContent(logOutput.toString());
@@ -112,7 +111,44 @@ public class LatexCompileUtil {
                 // PDF 文件已生成，认为编译成功
                 String pdfFileName = "project_" + projectId + "_" + compileId + ".pdf";
                 Path outputPdf = pdfOutputDir.resolve(pdfFileName);
-                Files.copy(pdfFile, outputPdf);
+                Files.copy(pdfFile, outputPdf, StandardCopyOption.REPLACE_EXISTING);
+                
+                // 校验生成文件是否为有效PDF，避免前端出现“无法打开此文件”
+                if (!isValidPdf(outputPdf)) {
+                    // 有些 XeLaTeX 场景会先产出损坏 PDF，同时日志提示图片缺失；此时强制走占位图重试
+                    if (hasMissingGraphicsError(logContent)) {
+                        String tolerantContent = buildMissingImageTolerantContent(latexContent);
+                        Files.write(texFile, tolerantContent.getBytes("UTF-8"));
+                        CompileExecutionResult retryExecution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
+                        logOutput.append("\n[retry-on-invalid-pdf-with-missing-image]\n").append(retryExecution.logContent);
+                        logContent = logOutput.toString();
+                        pdfFile = tempWorkDir.resolve("main.pdf");
+                        if ("xelatex".equals(normalizedCompiler) && !Files.exists(pdfFile)) {
+                            Path xdvFile = tempWorkDir.resolve("main.xdv");
+                            if (Files.exists(xdvFile)) {
+                                String xdvLog = convertXdvToPdf(tempWorkDir, xdvFile);
+                                if (xdvLog != null && !xdvLog.isEmpty()) {
+                                    logOutput.append("\n[xdvipdfmx-retry]\n").append(xdvLog).append("\n");
+                                    logContent = logOutput.toString();
+                                }
+                            }
+                        }
+                        if (Files.exists(pdfFile)) {
+                            Files.copy(pdfFile, outputPdf, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    }
+
+                    if (!isValidPdf(outputPdf)) {
+                        result.setStatus("ERROR");
+                        String logHint = extractErrorMessage(logContent);
+                        if (logHint == null || logHint.isEmpty()) {
+                            logHint = "编译产物不是有效的 PDF 文件";
+                        }
+                        result.setErrorMessage(logHint);
+                        result.setPdfPath(null);
+                        return result;
+                    }
+                }
                 
                 // 检查是否有警告或非致命错误（如图片文件缺失等）
                 // 如果 PDF 生成了，即使有错误消息，也视为成功或警告
@@ -159,25 +195,191 @@ public class LatexCompileUtil {
             deleteDirectory(tempWorkDir.toFile());
         }
     }
+
+    private CompileExecutionResult runCompileCommand(String compilerCommand, String texFileName, Path workDir) throws Exception {
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                compilerCommand,
+                "-interaction=nonstopmode",
+                texFileName
+        );
+        processBuilder.directory(workDir.toAbsolutePath().toFile());
+        processBuilder.redirectErrorStream(true);
+
+        Process process = processBuilder.start();
+        StringBuilder logOutput = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), "UTF-8"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                logOutput.append(line).append("\n");
+            }
+        }
+
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new RuntimeException("编译超时（超过 " + timeoutSeconds + " 秒）");
+        }
+        return new CompileExecutionResult(process.exitValue(), logOutput.toString());
+    }
+
+    private boolean hasMissingGraphicsError(String logContent) {
+        if (logContent == null || logContent.isEmpty()) {
+            return false;
+        }
+        String normalized = logContent.toLowerCase(Locale.ROOT);
+        return normalized.contains("unable to load picture or pdf file")
+                || normalized.contains("file") && normalized.contains("not found")
+                || normalized.contains("cannot determine size of graphic");
+    }
+
+    /**
+     * 将 includegraphics 指令替换成可编译占位内容，避免图片文件缺失导致编译中断
+     */
+    private String buildMissingImageTolerantContent(String latexContent) {
+        if (latexContent == null || latexContent.isEmpty()) {
+            return latexContent;
+        }
+        String replaced = latexContent.replaceAll(
+                "\\\\includegraphics\\s*(\\[[^\\]]*\\])?\\s*\\{([^}]*)\\}",
+                "\\\\fbox{[missing image: $2]}"
+        );
+        // 保留 draft 选项作为额外兜底
+        return "\\PassOptionsToPackage{draft}{graphicx}\n" + replaced;
+    }
+
+    private static class CompileExecutionResult {
+        private final int exitCode;
+        private final String logContent;
+
+        private CompileExecutionResult(int exitCode, String logContent) {
+            this.exitCode = exitCode;
+            this.logContent = logContent;
+        }
+    }
+
+    /**
+     * 将 XeLaTeX 产出的 xdv 转换为 PDF
+     */
+    private String convertXdvToPdf(Path tempWorkDir, Path xdvFile) {
+        StringBuilder logOutput = new StringBuilder();
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "xdvipdfmx",
+                    xdvFile.getFileName().toString()
+            );
+            pb.directory(tempWorkDir.toAbsolutePath().toFile());
+            pb.redirectErrorStream(true);
+
+            Process p = pb.start();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(p.getInputStream(), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logOutput.append(line).append("\n");
+                }
+            }
+            boolean finished = p.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                p.destroyForcibly();
+                logOutput.append("xdvipdfmx 执行超时");
+            }
+        } catch (Exception e) {
+            logOutput.append("xdvipdfmx 转换失败: ").append(e.getMessage());
+        }
+        return logOutput.toString().trim();
+    }
+
+    /**
+     * 校验文件是否为有效PDF（最小校验：文件头 + 基本大小）
+     */
+    private boolean isValidPdf(Path pdfPath) {
+        try {
+            if (!Files.exists(pdfPath)) {
+                return false;
+            }
+            long size = Files.size(pdfPath);
+            if (size < 100) {
+                return false;
+            }
+            try (InputStream in = Files.newInputStream(pdfPath)) {
+                byte[] header = new byte[1024];
+                int read = in.read(header);
+                if (read <= 0) {
+                    return false;
+                }
+                // PDF 规范允许 header 不一定出现在第 0 字节，通常在前 1KB 内
+                for (int i = 0; i <= read - 5; i++) {
+                    if (header[i] == '%' && header[i + 1] == 'P' && header[i + 2] == 'D' && header[i + 3] == 'F' && header[i + 4] == '-') {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+    }
     
     /**
      * 获取编译器命令
      */
     private String getCompilerCommand(String compiler) {
-        if (compiler == null || compiler.isEmpty()) {
-            compiler = "pdflatex";
-        }
-        
-        switch (compiler.toLowerCase()) {
-            case "xelatex":
-                return "xelatex";
-            case "lualatex":
-                return "lualatex";
+        String normalizedCompiler = normalizeCompiler(compiler);
+        switch (normalizedCompiler) {
             case "pdflatex":
+                return pdflatexPath;
+            case "xelatex":
+                return resolveCompilerPath("xelatex", xelatexPath);
+            case "lualatex":
+                return resolveCompilerPath("lualatex", lualatexPath);
             default:
-                // 如果配置了完整路径，使用配置的路径，否则使用系统PATH中的命令
                 return pdflatexPath;
         }
+    }
+
+    /**
+     * 解析编译器命令路径：
+     * 1) 优先使用显式配置的路径；
+     * 2) 若为默认命令名，且 pdflatex-path 为绝对路径，则推导同目录下的引擎可执行文件。
+     */
+    private String resolveCompilerPath(String compilerName, String configuredPath) {
+        if (configuredPath != null && !configuredPath.trim().isEmpty() && !compilerName.equalsIgnoreCase(configuredPath.trim())) {
+            return configuredPath.trim();
+        }
+
+        if (pdflatexPath != null) {
+            String pdflatex = pdflatexPath.trim();
+            // 当 pdflatex-path 配的是绝对路径时，推导兄弟可执行文件（Windows/Linux/macOS 均兼容）
+            if (pdflatex.contains("/") || pdflatex.contains("\\")) {
+                Path pdflatexFile = Paths.get(pdflatex);
+                Path parent = pdflatexFile.getParent();
+                String fileName = pdflatexFile.getFileName() != null ? pdflatexFile.getFileName().toString() : "";
+                if (parent != null && !fileName.isEmpty()) {
+                    String suffix = fileName.toLowerCase(Locale.ROOT).endsWith(".exe") ? ".exe" : "";
+                    Path siblingCompiler = parent.resolve(compilerName + suffix);
+                    if (Files.exists(siblingCompiler)) {
+                        return siblingCompiler.toString();
+                    }
+                }
+            }
+        }
+
+        return compilerName;
+    }
+
+    /**
+     * 规范化编译器参数，仅允许三种受支持引擎，非法值回退到 pdflatex
+     */
+    private String normalizeCompiler(String compiler) {
+        if (compiler == null) {
+            return "pdflatex";
+        }
+        String normalized = compiler.trim().toLowerCase();
+        if ("xelatex".equals(normalized) || "lualatex".equals(normalized) || "pdflatex".equals(normalized)) {
+            return normalized;
+        }
+        return "pdflatex";
     }
     
     /**

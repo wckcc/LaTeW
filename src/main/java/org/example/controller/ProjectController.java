@@ -9,9 +9,17 @@ import org.example.dto.ResponseResult;
 import org.example.service.AIService;
 import org.example.service.ProjectService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.FileInputStream;
+import java.net.URLEncoder;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -172,6 +180,40 @@ public class ProjectController {
             errorResult.setErrorMessage("编译失败: " + e.getMessage());
             errorResult.setCreatedAt(LocalDateTime.now());
             return ResponseResult.success("编译失败", errorResult);
+        }
+    }
+
+    /**
+     * 导出项目为 Word
+     * GET /api/projects/{id}/export-word
+     */
+    @GetMapping("/{id}/export-word")
+    public ResponseEntity<?> exportWord(@PathVariable Long id, HttpServletRequest request) {
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseEntity.status(401).body("用户未登录");
+        }
+
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseEntity.status(404).body("项目不存在");
+        }
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseEntity.status(403).body("没有权限导出该项目");
+        }
+
+        try {
+            String outputPath = projectService.exportProjectToWord(id);
+            Path file = Paths.get(outputPath);
+            String fileName = (project.getName() == null || project.getName().trim().isEmpty() ? "project_" + id : project.getName().trim()) + ".docx";
+            String encodedFileName = URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                    .body(new InputStreamResource(new FileInputStream(file.toFile())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("导出 Word 失败: " + e.getMessage());
         }
     }
 

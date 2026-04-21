@@ -44,5 +44,12 @@ public interface ProjectService {
      * @return 编译结果
      */
     CompileResult compileProject(Long projectId, String compiler);
+
+    /**
+     * 导出项目内容为 Word 文档
+     * @param projectId 项目ID
+     * @return 导出的 Word 文件绝对路径
+     */
+    String exportProjectToWord(Long projectId);
 }
 

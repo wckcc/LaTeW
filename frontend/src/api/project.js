@@ -1,4 +1,6 @@
 import request from '../utils/request'
+import axios from 'axios'
+import { getToken } from '../utils/auth'
 
 /**
  * 创建项目
@@ -106,6 +108,21 @@ export function createProjectFromPdf(file, projectName) {
     method: 'post',
     data: formData,
     timeout: 120000 // 文件上传和AI处理可能需要更长时间，设置为120秒
+  })
+}
+
+/**
+ * 导出项目为Word文档（docx）
+ * @param {Number} id - 项目ID
+ * @returns {Promise<Blob>}
+ */
+export function exportProjectWord(id) {
+  const token = getToken()
+  return axios({
+    url: `/api/projects/${id}/export-word`,
+    method: 'get',
+    responseType: 'blob',
+    headers: token ? { token } : {}
   })
 }
 

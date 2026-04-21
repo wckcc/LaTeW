@@ -5,7 +5,7 @@ import Projects from '../views/Projects.vue'
 import NewProject from '../views/NewProject.vue'
 import Editor from '../views/Editor.vue'
 import Profile from '../views/Profile.vue'
-import { getToken } from '../utils/auth'
+import { isAuthenticated } from '../utils/auth'
 const routes = [
   {
     path: '/',
@@ -54,12 +54,12 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach((to, from, next) => {
-  const token = getToken()
+  const authed = isAuthenticated()
   
-  if (to.meta.requiresAuth && !token) {
+  if (to.meta.requiresAuth && !authed) {
     // 需要登录但未登录，跳转到登录页
     next('/login')
-  } else if (to.path === '/login' && token) {
+  } else if (to.path === '/login' && authed) {
     // 已登录，访问登录页时跳转到项目管理页
     next('/projects')
   } else {

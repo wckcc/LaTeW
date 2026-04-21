@@ -5,6 +5,7 @@ import org.example.dto.ProjectDTO;
 import org.example.mapper.ProjectMapper;
 import org.example.service.ProjectService;
 import org.example.util.LatexCompileUtil;
+import org.example.util.WordExportUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,9 @@ public class ProjectServiceImpl implements ProjectService {
     
     @Autowired
     private LatexCompileUtil latexCompileUtil;
+
+    @Autowired
+    private WordExportUtil wordExportUtil;
 
     @Override
     public ProjectDTO createProject(ProjectDTO projectDTO) {
@@ -106,6 +110,22 @@ public class ProjectServiceImpl implements ProjectService {
             result.setErrorMessage("编译失败: " + e.getMessage());
             result.setCreatedAt(LocalDateTime.now());
             return result;
+        }
+    }
+
+    @Override
+    public String exportProjectToWord(Long projectId) {
+        ProjectDTO project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new RuntimeException("项目不存在");
+        }
+        if (project.getContent() == null || project.getContent().trim().isEmpty()) {
+            throw new RuntimeException("项目内容为空，无法导出 Word");
+        }
+        try {
+            return wordExportUtil.export(project.getContent(), projectId).toString();
+        } catch (Exception e) {
+            throw new RuntimeException("导出 Word 失败: " + e.getMessage(), e);
         }
     }
 }

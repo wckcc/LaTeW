@@ -68,7 +68,17 @@ latex:
     temp-dir: ./temp/compile  # 临时编译目录
     output-dir: ./static/pdf  # PDF输出目录
     pdflatex-path: pdflatex   # pdflatex命令路径（如果不在PATH中，请指定完整路径，如：C:/texlive/2024/bin/windows/pdflatex.exe）
+    xelatex-path: xelatex     # xelatex命令路径（可改为完整路径）
+    lualatex-path: lualatex   # lualatex命令路径（可改为完整路径）
     timeout: 30               # 编译超时时间（秒）
+
+# Word 导出配置（Pandoc）
+word:
+  export:
+    temp-dir: ./temp/word     # 临时导出目录
+    output-dir: ./static/word # Word 输出目录
+    pandoc-path: pandoc       # pandoc 命令路径（若不在 PATH 中请配置绝对路径）
+    timeout: 60               # 导出超时时间（秒）
 
 # 火山引擎 API配置（豆包大模型）
 volcengine:

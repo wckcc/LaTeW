@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken } from './auth'
+import { getToken, clearAuth } from './auth'
 
 // 创建axios实例
 const request = axios.create({
@@ -37,6 +37,10 @@ request.interceptors.response.use(
     return res
   },
   error => {
+    if (error.response?.status === 401) {
+      // 后端鉴权失败时，清理本地登录态，避免前端误判为已登录
+      clearAuth()
+    }
     const message = error.response?.data?.message || error.message || '请求失败'
     return Promise.reject(new Error(message))
   }
