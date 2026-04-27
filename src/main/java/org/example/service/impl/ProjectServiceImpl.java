@@ -1,15 +1,21 @@
 package org.example.service.impl;
 
 import org.example.dto.CompileResult;
+import org.example.dto.PdfWordFileDTO;
 import org.example.dto.ProjectDTO;
+import org.example.mapper.PdfWordFileMapper;
 import org.example.mapper.ProjectMapper;
 import org.example.service.ProjectService;
 import org.example.util.LatexCompileUtil;
 import org.example.util.WordExportUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -28,6 +34,44 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Autowired
     private WordExportUtil wordExportUtil;
+
+    @Autowired
+    private PdfWordFileMapper pdfWordFileMapper;
+
+    @Value("${latex.compile.output-dir:./static/pdf}")
+    private String pdfOutputDir;
+
+    private void recordFile(Long projectId, String filename, String absolutePath) {
+        PdfWordFileDTO file = new PdfWordFileDTO();
+        file.setProjectId(projectId);
+        file.setFilename(filename);
+        file.setFilePath(absolutePath);
+        file.setUploadedAt(LocalDateTime.now());
+        pdfWordFileMapper.insert(file);
+    }
+
+    private void trimBySuffix(Long projectId, String suffixPattern) {
+        List<PdfWordFileDTO> files = pdfWordFileMapper.selectByProjectAndSuffix(projectId, suffixPattern);
+        if (files == null || files.size() <= 10) {
+            return;
+        }
+        for (int i = 10; i < files.size(); i++) {
+            PdfWordFileDTO file = files.get(i);
+            try {
+                if (file.getFilePath() != null && !file.getFilePath().isBlank()) {
+                    Files.deleteIfExists(Paths.get(file.getFilePath()));
+                }
+            } catch (Exception ignored) {
+                // 删除物理文件失败时依然删除记录，避免无限膨胀
+            }
+            pdfWordFileMapper.deleteById(file.getId());
+        }
+    }
+
+    private void enforceFileRetention(Long projectId) {
+        trimBySuffix(projectId, "%.pdf");
+        trimBySuffix(projectId, "%.docx");
+    }
 
     @Override
     public ProjectDTO createProject(ProjectDTO projectDTO) {
@@ -103,6 +147,12 @@ public class ProjectServiceImpl implements ProjectService {
                 projectId, 
                 compiler != null ? compiler : "pdflatex"
             );
+            if (result != null && result.getPdfPath() != null && !result.getPdfPath().isBlank()) {
+                String pdfName = Paths.get(result.getPdfPath()).getFileName().toString();
+                Path absolutePdf = Paths.get(pdfOutputDir).toAbsolutePath().normalize().resolve(pdfName);
+                recordFile(projectId, pdfName, absolutePdf.toString());
+            }
+            enforceFileRetention(projectId);
             return result;
         } catch (Exception e) {
             CompileResult result = new CompileResult();
@@ -123,9 +173,25 @@ public class ProjectServiceImpl implements ProjectService {
             throw new RuntimeException("项目内容为空，无法导出 Word");
         }
         try {
-            return wordExportUtil.export(project.getContent(), projectId).toString();
+            Path outputPath = wordExportUtil.export(project.getContent(), projectId);
+            String filename = outputPath.getFileName() == null ? ("project_" + projectId + ".docx") : outputPath.getFileName().toString();
+            recordFile(projectId, filename, outputPath.toString());
+            enforceFileRetention(projectId);
+            return outputPath.toString();
         } catch (Exception e) {
             throw new RuntimeException("导出 Word 失败: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void deleteProjectById(Long projectId) {
+        ProjectDTO existing = projectMapper.selectById(projectId);
+        if (existing == null) {
+            throw new RuntimeException("项目不存在");
+        }
+        int result = projectMapper.deleteById(projectId);
+        if (result <= 0) {
+            throw new RuntimeException("删除项目失败");
         }
     }
 }

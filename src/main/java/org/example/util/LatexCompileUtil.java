@@ -11,8 +11,14 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * LaTeX编译工具类
@@ -20,6 +26,11 @@ import java.util.concurrent.TimeUnit;
  */
 @Component
 public class LatexCompileUtil {
+    private static final String TEMPLATE_SOURCE_PREFIX = "%TEMPLATE_SOURCE_PATH=";
+    private static final Set<String> COMMON_BUILTIN_CLASSES = Set.of(
+            "article", "report", "book", "letter", "proc", "slides",
+            "minimal", "beamer", "memoir", "scrartcl", "scrreprt", "scrbook"
+    );
 
     @Value("${latex.compile.temp-dir:./temp/compile}")
     private String tempDir;
@@ -38,6 +49,396 @@ public class LatexCompileUtil {
 
     @Value("${latex.compile.timeout:30}")
     private int timeoutSeconds;
+
+    @Value("${image.upload.path:./static/images}")
+    private String imageUploadDir;
+
+    private Path resolveImageSource(String rawFileName) {
+        if (rawFileName == null || rawFileName.isBlank()) {
+            return null;
+        }
+        try {
+            String cleaned = rawFileName.trim();
+            int queryIdx = cleaned.indexOf('?');
+            if (queryIdx >= 0) {
+                cleaned = cleaned.substring(0, queryIdx);
+            }
+            cleaned = URLDecoder.decode(cleaned, StandardCharsets.UTF_8);
+            int slashIdx = cleaned.lastIndexOf('/');
+            if (slashIdx >= 0 && slashIdx < cleaned.length() - 1) {
+                cleaned = cleaned.substring(slashIdx + 1);
+            }
+            if (cleaned.isBlank()) {
+                return null;
+            }
+            // 兼容从通用 LaTeX 模板导入的占位符路径（如 <eps-file>）
+            if (cleaned.contains("<") || cleaned.contains(">")) {
+                return null;
+            }
+
+            Path configured = Paths.get(imageUploadDir).toAbsolutePath().normalize().resolve(cleaned);
+            if (Files.exists(configured) && Files.isRegularFile(configured)) {
+                return configured;
+            }
+
+            Path fallback1 = Paths.get("static", "images").toAbsolutePath().normalize().resolve(cleaned);
+            if (Files.exists(fallback1) && Files.isRegularFile(fallback1)) {
+                return fallback1;
+            }
+
+            Path fallback2 = Paths.get(System.getProperty("user.dir", "."), "static", "images")
+                    .toAbsolutePath().normalize().resolve(cleaned);
+            if (Files.exists(fallback2) && Files.isRegularFile(fallback2)) {
+                return fallback2;
+            }
+
+            return null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String prepareImagesForCompile(String latexContent, Path tempWorkDir) {
+        if (latexContent == null || latexContent.isBlank()) {
+            return latexContent;
+        }
+        Pattern p = Pattern.compile("\\\\includegraphics\\s*(\\[[^\\]]*\\])?\\s*\\{([^}]+)\\}");
+        Matcher m = p.matcher(latexContent);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String opts = m.group(1) == null ? "" : m.group(1);
+            String originalPath = m.group(2).trim();
+            if (originalPath.contains("<") || originalPath.contains(">")) {
+                String placeholder = "% Removed invalid image placeholder: " + originalPath + "\n\\fbox{Image Placeholder}";
+                m.appendReplacement(sb, Matcher.quoteReplacement(placeholder));
+                continue;
+            }
+            String replacementPath = originalPath;
+            String rawFileName = originalPath.startsWith("/api/images/")
+                    ? originalPath.substring("/api/images/".length())
+                    : originalPath;
+            String fileName = rawFileName;
+            int queryIdx = fileName.indexOf('?');
+            if (queryIdx >= 0) {
+                fileName = fileName.substring(0, queryIdx);
+            }
+            int slashIdx = fileName.lastIndexOf('/');
+            if (slashIdx >= 0 && slashIdx < fileName.length() - 1) {
+                fileName = fileName.substring(slashIdx + 1);
+            }
+            Path source = resolveImageSource(rawFileName);
+            Path target = tempWorkDir.resolve(fileName);
+            try {
+                if (source != null && Files.exists(source) && Files.isRegularFile(source)) {
+                    Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+                    replacementPath = fileName;
+                }
+            } catch (Exception ignored) {
+                // 保持原路径，后续编译日志会给出错误信息
+            }
+            String replacement = "\\includegraphics" + opts + "{" + replacementPath + "}";
+            m.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    private String ensureGraphicxPackage(String latexContent) {
+        if (latexContent == null || latexContent.isBlank()) {
+            return latexContent;
+        }
+        if (!latexContent.contains("\\includegraphics")) {
+            return latexContent;
+        }
+        String content = disableDraftMode(latexContent);
+
+        // 先移除已有 graphicx 引入，避免选项冲突（draft/final/重复加载）
+        content = content.replaceAll(
+                "(?m)^\\s*\\\\usepackage\\s*(\\[[^\\]]*\\])?\\s*\\{[^}]*graphicx[^}]*\\}\\s*$\\n?",
+                ""
+        );
+
+        // 仅在明确找到 documentclass 时才注入，避免包声明出现在文档类之前
+        Pattern docClassPattern = Pattern.compile("(?m)^\\s*\\\\documentclass\\s*(\\[[^\\]]*\\])?\\s*\\{[^}]+\\}");
+        Matcher docClassMatcher = docClassPattern.matcher(content);
+        if (docClassMatcher.find()) {
+            int insertPos = docClassMatcher.end();
+            String graphicxBlock = "\n\\usepackage{graphicx}\n\\setkeys{Gin}{draft=false}\n";
+            content = content.substring(0, insertPos)
+                    + graphicxBlock
+                    + content.substring(insertPos);
+        } else {
+            // 无 documentclass 的片段内容不强制注入，避免破坏模板原始结构
+            return content;
+        }
+
+        // 强制关闭图像 draft 渲染，避免只显示文件名而不显示真实图片
+        if (!content.contains("\\setkeys{Gin}{draft=false}")) {
+            Pattern beginDocPattern = Pattern.compile("\\\\begin\\{document\\}");
+            Matcher beginDocMatcher = beginDocPattern.matcher(content);
+            if (beginDocMatcher.find()) {
+                int insertPos = beginDocMatcher.start();
+                content = content.substring(0, insertPos)
+                        + "\\setkeys{Gin}{draft=false}\n"
+                        + content.substring(insertPos);
+            } else {
+                content = content + "\n\\setkeys{Gin}{draft=false}\n";
+            }
+        }
+        return content;
+    }
+
+    private String disableDraftMode(String content) {
+        if (content == null || content.isBlank()) {
+            return content;
+        }
+        // 1) 处理 documentclass 中的 draft 选项
+        Pattern docClassPattern = Pattern.compile("\\\\documentclass\\s*\\[([^\\]]*)\\]\\s*\\{([^}]+)\\}");
+        Matcher docMatcher = docClassPattern.matcher(content);
+        StringBuffer docSb = new StringBuffer();
+        while (docMatcher.find()) {
+            String options = docMatcher.group(1);
+            String clazz = docMatcher.group(2);
+            String cleaned = options
+                    .replaceAll("(^|,)\\s*draft\\s*(,|$)", "$1$2")
+                    .replaceAll(",,+", ",")
+                    .replaceAll("^,|,$", "")
+                    .trim();
+            if (cleaned.isEmpty()) {
+                docMatcher.appendReplacement(docSb, Matcher.quoteReplacement("\\documentclass{" + clazz + "}"));
+            } else {
+                docMatcher.appendReplacement(docSb, Matcher.quoteReplacement("\\documentclass[" + cleaned + "]{" + clazz + "}"));
+            }
+        }
+        docMatcher.appendTail(docSb);
+        String updated = docSb.toString();
+
+        // 2) 处理 graphicx 的 draft 选项
+        updated = updated.replaceAll("\\\\usepackage\\s*\\[([^\\]]*?)\\bdraft\\b([^\\]]*?)\\]\\s*\\{graphicx\\}",
+                "\\\\usepackage[$1$2]{graphicx}");
+        updated = updated.replaceAll("\\\\usepackage\\s*\\[\\s*,", "\\\\usepackage[");
+        updated = updated.replaceAll(",\\s*\\]", "]");
+        return updated;
+    }
+
+    private String fallbackMissingDocumentClass(String latexContent, Path tempWorkDir, boolean allowFallback) {
+        if (latexContent == null || latexContent.isBlank()) {
+            return latexContent;
+        }
+        Pattern docClassPattern = Pattern.compile("(?m)^\\s*\\\\documentclass\\s*(\\[[^\\]]*\\])?\\s*\\{([^}]+)\\}");
+        Matcher matcher = docClassPattern.matcher(latexContent);
+        if (!matcher.find()) {
+            return latexContent;
+        }
+
+        String className = matcher.group(2) == null ? "" : matcher.group(2).trim();
+        if (className.isEmpty()) {
+            return latexContent;
+        }
+        if (className.toLowerCase(Locale.ROOT).startsWith("sn-")) {
+            return latexContent;
+        }
+        if (COMMON_BUILTIN_CLASSES.contains(className.toLowerCase(Locale.ROOT))) {
+            return latexContent;
+        }
+
+        Path classFile = tempWorkDir.resolve(className + ".cls");
+        if (Files.exists(classFile) && Files.isRegularFile(classFile)) {
+            return latexContent;
+        }
+
+        if (!allowFallback) {
+            return latexContent;
+        }
+
+        return matcher.replaceFirst(Matcher.quoteReplacement("\\documentclass{article}"));
+    }
+
+    private boolean hasSpringerFrontmatterCommands(String latexContent) {
+        if (latexContent == null || latexContent.isBlank()) {
+            return false;
+        }
+        return latexContent.contains("\\affil")
+                || latexContent.contains("\\email")
+                || latexContent.contains("\\author[")
+                || latexContent.contains("\\author*[");
+    }
+
+    private String enforceSpringerClassWhenAvailable(String latexContent, Path compileTexDir) {
+        if (latexContent == null || latexContent.isBlank()) {
+            return latexContent;
+        }
+        if (!hasSpringerFrontmatterCommands(latexContent)) {
+            return latexContent;
+        }
+        Path snClass = compileTexDir.resolve("sn-jnl.cls");
+        if (!Files.exists(snClass) || !Files.isRegularFile(snClass)) {
+            return latexContent;
+        }
+
+        Pattern docClassPattern = Pattern.compile("(?m)^\\s*\\\\documentclass\\s*(\\[[^\\]]*\\])?\\s*\\{([^}]+)\\}");
+        Matcher matcher = docClassPattern.matcher(latexContent);
+        if (!matcher.find()) {
+            return latexContent;
+        }
+        String className = matcher.group(2) == null ? "" : matcher.group(2).trim().toLowerCase(Locale.ROOT);
+        if ("sn-jnl".equals(className)) {
+            return latexContent;
+        }
+        return matcher.replaceFirst(Matcher.quoteReplacement("\\documentclass[pdflatex,sn-mathphys-num]{sn-jnl}"));
+    }
+
+    private static class TemplateContentContext {
+        private final String latexContent;
+        private final Path sourceTexPath;
+
+        private TemplateContentContext(String latexContent, Path sourceTexPath) {
+            this.latexContent = latexContent;
+            this.sourceTexPath = sourceTexPath;
+        }
+    }
+
+    private TemplateContentContext extractTemplateSourceContext(String latexContent) {
+        if (latexContent == null || latexContent.isBlank()) {
+            return new TemplateContentContext(latexContent, null);
+        }
+        String normalized = latexContent.replace("\r\n", "\n");
+        int firstLineEnd = normalized.indexOf('\n');
+        String firstLine = firstLineEnd >= 0 ? normalized.substring(0, firstLineEnd) : normalized;
+        if (!firstLine.startsWith(TEMPLATE_SOURCE_PREFIX)) {
+            return new TemplateContentContext(latexContent, null);
+        }
+
+        String sourcePathRaw = firstLine.substring(TEMPLATE_SOURCE_PREFIX.length()).trim();
+        String remaining = firstLineEnd >= 0 ? normalized.substring(firstLineEnd + 1) : "";
+        if (sourcePathRaw.isEmpty()) {
+            return new TemplateContentContext(remaining, null);
+        }
+        try {
+            Path sourcePath = Paths.get(sourcePathRaw).toAbsolutePath().normalize();
+            return new TemplateContentContext(remaining, sourcePath);
+        } catch (Exception ignored) {
+            return new TemplateContentContext(remaining, null);
+        }
+    }
+
+    private Path locateTemplateBundleRoot(Path sourceTexPath) {
+        if (sourceTexPath == null) {
+            return null;
+        }
+        Path cursor = sourceTexPath.getParent();
+        while (cursor != null) {
+            Path name = cursor.getFileName();
+            if (name != null && name.toString().startsWith("bundle_")) {
+                return cursor;
+            }
+            cursor = cursor.getParent();
+        }
+        return sourceTexPath.getParent();
+    }
+
+    private String copyTemplateDependencies(Path sourceTexPath, Path tempWorkDir) {
+        if (sourceTexPath == null || !Files.exists(sourceTexPath) || !Files.isRegularFile(sourceTexPath)) {
+            return "main.tex";
+        }
+        try {
+            Path bundleRoot = locateTemplateBundleRoot(sourceTexPath);
+            if (bundleRoot == null || !Files.exists(bundleRoot) || !Files.isDirectory(bundleRoot)) {
+                return "main.tex";
+            }
+            try (Stream<Path> stream = Files.walk(bundleRoot)) {
+                stream.forEach(path -> {
+                    try {
+                        Path relative = bundleRoot.relativize(path);
+                        Path target = tempWorkDir.resolve(relative).normalize();
+                        if (!target.startsWith(tempWorkDir)) {
+                            return;
+                        }
+                        if (Files.isDirectory(path)) {
+                            Files.createDirectories(target);
+                        } else if (Files.isRegularFile(path)) {
+                            Path parent = target.getParent();
+                            if (parent != null) {
+                                Files.createDirectories(parent);
+                            }
+                            Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (Exception ignored) {
+                        // 单个依赖复制失败不阻塞整体编译
+                    }
+                });
+            }
+            Path relativeTex = bundleRoot.relativize(sourceTexPath);
+            return relativeTex.toString().replace("\\", "/");
+        } catch (Exception ignored) {
+            return "main.tex";
+        }
+    }
+
+    private boolean shouldRunBibtex(Path workDir, String texFileName) {
+        try {
+            String baseName = texFileName;
+            int dot = baseName.lastIndexOf('.');
+            if (dot > 0) {
+                baseName = baseName.substring(0, dot);
+            }
+            Path auxFile = workDir.resolve(baseName + ".aux");
+            if (!Files.exists(auxFile) || !Files.isRegularFile(auxFile)) {
+                return false;
+            }
+            String auxContent = Files.readString(auxFile, StandardCharsets.UTF_8);
+            if (auxContent == null || auxContent.isBlank()) {
+                return false;
+            }
+            return auxContent.contains("\\citation")
+                    || auxContent.contains("\\bibdata")
+                    || auxContent.contains("\\bibstyle");
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String runBibtexCommand(Path workDir, String texFileName) {
+        StringBuilder logOutput = new StringBuilder();
+        try {
+            String baseName = texFileName;
+            int dot = baseName.lastIndexOf('.');
+            if (dot > 0) {
+                baseName = baseName.substring(0, dot);
+            }
+
+            ProcessBuilder pb = new ProcessBuilder("bibtex", baseName);
+            pb.directory(workDir.toAbsolutePath().toFile());
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), "UTF-8"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logOutput.append(line).append("\n");
+                }
+            }
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                logOutput.append("bibtex 执行超时\n");
+            }
+        } catch (Exception e) {
+            logOutput.append("bibtex 执行失败: ").append(e.getMessage()).append("\n");
+        }
+        return logOutput.toString();
+    }
+
+    private String getBaseName(String texFileName) {
+        if (texFileName == null || texFileName.isBlank()) {
+            return "main";
+        }
+        int slash = Math.max(texFileName.lastIndexOf('/'), texFileName.lastIndexOf('\\'));
+        String name = slash >= 0 ? texFileName.substring(slash + 1) : texFileName;
+        int dot = name.lastIndexOf('.');
+        return dot > 0 ? name.substring(0, dot) : name;
+    }
 
     /**
      * 编译 LaTeX 代码为 PDF
@@ -65,6 +466,22 @@ public class LatexCompileUtil {
         Path texFile = tempWorkDir.resolve(texFileName);
         
         try {
+            TemplateContentContext templateContext = extractTemplateSourceContext(latexContent);
+            latexContent = templateContext.latexContent;
+            if (templateContext.sourceTexPath != null) {
+                texFileName = copyTemplateDependencies(templateContext.sourceTexPath, tempWorkDir);
+                texFile = tempWorkDir.resolve(texFileName).normalize();
+            }
+            Path compileTexDir = texFile.getParent() == null ? tempWorkDir : texFile.getParent();
+            latexContent = prepareImagesForCompile(latexContent, compileTexDir);
+            latexContent = enforceSpringerClassWhenAvailable(latexContent, compileTexDir);
+            latexContent = ensureGraphicxPackage(latexContent);
+            boolean allowClassFallback = templateContext.sourceTexPath == null;
+            latexContent = fallbackMissingDocumentClass(latexContent, compileTexDir, allowClassFallback);
+            Path texParent = texFile.getParent();
+            if (texParent != null) {
+                Files.createDirectories(texParent);
+            }
             // 写入 LaTeX 内容到文件
             Files.write(texFile, latexContent.getBytes("UTF-8"));
             
@@ -75,23 +492,28 @@ public class LatexCompileUtil {
             CompileExecutionResult execution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
             StringBuilder logOutput = new StringBuilder(execution.logContent);
             int exitCode = execution.exitCode;
+
+            if (shouldRunBibtex(tempWorkDir, texFileName)) {
+                String bibtexLog = runBibtexCommand(tempWorkDir, texFileName);
+                if (!bibtexLog.isBlank()) {
+                    logOutput.append("\n[bibtex]\n").append(bibtexLog).append("\n");
+                }
+                CompileExecutionResult secondPass = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
+                logOutput.append("\n[latex-pass-2]\n").append(secondPass.logContent).append("\n");
+                exitCode = secondPass.exitCode;
+
+                CompileExecutionResult thirdPass = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
+                logOutput.append("\n[latex-pass-3]\n").append(thirdPass.logContent).append("\n");
+                exitCode = thirdPass.exitCode;
+            }
             long compileTime = System.currentTimeMillis() - startTime;
             
+            String baseName = getBaseName(texFileName);
             // 检查PDF是否生成（即使退出码不为0，如果PDF生成了也认为成功）
-            Path pdfFile = tempWorkDir.resolve("main.pdf");
-            if (!Files.exists(pdfFile) && hasMissingGraphicsError(logOutput.toString())) {
-                // 图片缺失时自动降级重试：将 includegraphics 替换为占位框，保证可预览
-                String draftContent = buildMissingImageTolerantContent(latexContent);
-                Files.write(texFile, draftContent.getBytes("UTF-8"));
-                CompileExecutionResult retryExecution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
-                logOutput.append("\n[retry-with-graphicx-draft]\n").append(retryExecution.logContent);
-                exitCode = retryExecution.exitCode;
-            }
-
-            pdfFile = tempWorkDir.resolve("main.pdf");
+            Path pdfFile = tempWorkDir.resolve(baseName + ".pdf");
             if (!Files.exists(pdfFile) && "xelatex".equals(normalizedCompiler)) {
                 // 某些 XeLaTeX 环境会产出 XDV，需要额外转换为 PDF
-                Path xdvFile = tempWorkDir.resolve("main.xdv");
+                Path xdvFile = tempWorkDir.resolve(baseName + ".xdv");
                 if (Files.exists(xdvFile)) {
                     String xdvLog = convertXdvToPdf(tempWorkDir, xdvFile);
                     if (xdvLog != null && !xdvLog.isEmpty()) {
@@ -115,29 +537,6 @@ public class LatexCompileUtil {
                 
                 // 校验生成文件是否为有效PDF，避免前端出现“无法打开此文件”
                 if (!isValidPdf(outputPdf)) {
-                    // 有些 XeLaTeX 场景会先产出损坏 PDF，同时日志提示图片缺失；此时强制走占位图重试
-                    if (hasMissingGraphicsError(logContent)) {
-                        String tolerantContent = buildMissingImageTolerantContent(latexContent);
-                        Files.write(texFile, tolerantContent.getBytes("UTF-8"));
-                        CompileExecutionResult retryExecution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
-                        logOutput.append("\n[retry-on-invalid-pdf-with-missing-image]\n").append(retryExecution.logContent);
-                        logContent = logOutput.toString();
-                        pdfFile = tempWorkDir.resolve("main.pdf");
-                        if ("xelatex".equals(normalizedCompiler) && !Files.exists(pdfFile)) {
-                            Path xdvFile = tempWorkDir.resolve("main.xdv");
-                            if (Files.exists(xdvFile)) {
-                                String xdvLog = convertXdvToPdf(tempWorkDir, xdvFile);
-                                if (xdvLog != null && !xdvLog.isEmpty()) {
-                                    logOutput.append("\n[xdvipdfmx-retry]\n").append(xdvLog).append("\n");
-                                    logContent = logOutput.toString();
-                                }
-                            }
-                        }
-                        if (Files.exists(pdfFile)) {
-                            Files.copy(pdfFile, outputPdf, StandardCopyOption.REPLACE_EXISTING);
-                        }
-                    }
-
                     if (!isValidPdf(outputPdf)) {
                         result.setStatus("ERROR");
                         String logHint = extractErrorMessage(logContent);
@@ -221,31 +620,6 @@ public class LatexCompileUtil {
             throw new RuntimeException("编译超时（超过 " + timeoutSeconds + " 秒）");
         }
         return new CompileExecutionResult(process.exitValue(), logOutput.toString());
-    }
-
-    private boolean hasMissingGraphicsError(String logContent) {
-        if (logContent == null || logContent.isEmpty()) {
-            return false;
-        }
-        String normalized = logContent.toLowerCase(Locale.ROOT);
-        return normalized.contains("unable to load picture or pdf file")
-                || normalized.contains("file") && normalized.contains("not found")
-                || normalized.contains("cannot determine size of graphic");
-    }
-
-    /**
-     * 将 includegraphics 指令替换成可编译占位内容，避免图片文件缺失导致编译中断
-     */
-    private String buildMissingImageTolerantContent(String latexContent) {
-        if (latexContent == null || latexContent.isEmpty()) {
-            return latexContent;
-        }
-        String replaced = latexContent.replaceAll(
-                "\\\\includegraphics\\s*(\\[[^\\]]*\\])?\\s*\\{([^}]*)\\}",
-                "\\\\fbox{[missing image: $2]}"
-        );
-        // 保留 draft 选项作为额外兜底
-        return "\\PassOptionsToPackage{draft}{graphicx}\n" + replaced;
     }
 
     private static class CompileExecutionResult {

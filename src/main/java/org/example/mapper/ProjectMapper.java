@@ -37,5 +37,12 @@ public interface ProjectMapper {
      * @return 影响行数
      */
     int updateById(ProjectDTO projectDTO);
+
+    /**
+     * 根据项目ID删除项目
+     * @param id 项目ID
+     * @return 影响行数
+     */
+    int deleteById(Long id);
 }
 

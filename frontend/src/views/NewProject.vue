@@ -161,7 +161,7 @@
 
 <script>
 import { createProject, createProjectFromPdf } from '../api/project'
-import { getAllTemplates, getTemplatesByCategory } from '../api/template'
+import { getAllTemplates } from '../api/template'
 import { getUser } from '../utils/auth'
 
 export default {
@@ -177,14 +177,7 @@ export default {
       selectedFile: null,
       isDragOver: false,
       creating: false,
-      categories: [
-        { value: 'all', label: '全部' },
-        { value: 'GENERAL', label: '通用' },
-        { value: 'CONFERENCE', label: '会议论文' },
-        { value: 'JOURNAL', label: '期刊论文' },
-        { value: 'THESIS', label: '学位论文' },
-        { value: 'BOOK', label: '书籍' }
-      ]
+      categories: [{ value: 'all', label: '全部' }]
     }
   },
   computed: {
@@ -316,7 +309,12 @@ export default {
           projectContent = '\\documentclass{article}\n\\begin{document}\n\n\\end{document}'
         } else if (this.selectedOption === 'template') {
           // 使用模板创建项目
-          projectContent = this.selectedTemplate.content || '\\documentclass{article}\n\\begin{document}\n\n\\end{document}'
+          const fallback = '\\documentclass{article}\n\\begin{document}\n\n\\end{document}'
+          const templateContent = this.selectedTemplate.content || fallback
+          const sourcePath = (this.selectedTemplate.sourcePath || '').trim()
+          projectContent = sourcePath
+            ? `%TEMPLATE_SOURCE_PATH=${sourcePath}\n${templateContent}`
+            : templateContent
         } else if (this.selectedOption === 'import') {
           // 导入PDF文件，使用AI识别并转换为LaTeX
           if (!this.selectedFile) {

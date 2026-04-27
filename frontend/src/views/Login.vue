@@ -92,7 +92,8 @@ export default {
           setToken(response.data.token)
           setUser({
             userId: response.data.userId,
-            username: response.data.username
+            username: response.data.username,
+            role: response.data.role || 'user'
           })
 
           // 登录成功，跳转到项目管理页面

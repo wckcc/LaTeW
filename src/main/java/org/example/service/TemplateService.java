@@ -1,6 +1,7 @@
 package org.example.service;
 
 import org.example.dto.TemplateDTO;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 /**
@@ -46,5 +47,10 @@ public interface TemplateService {
      * 增加模板使用次数
      */
     void incrementUsageCount(Long templateId);
+
+    /**
+     * 从 zip 包导入模板
+     */
+    int importTemplatesFromZip(MultipartFile zipFile, String templateName, String templateDescription);
 }
 

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.example.mapper.TemplateMapper">
+
+    <resultMap id="BaseResultMap" type="org.example.dto.TemplateDTO">
+        <id column="template_id" property="id" jdbcType="BIGINT"/>
+        <result column="name" property="name" jdbcType="VARCHAR"/>
+        <result column="description" property="description" jdbcType="LONGVARCHAR"/>
+        <result column="template_path" property="content" jdbcType="VARCHAR"/>
+        <result column="preview_url" property="previewImage" jdbcType="VARCHAR"/>
+        <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="org.example.dto.TemplateDTO" useGeneratedKeys="true" keyProperty="id" keyColumn="template_id">
+        INSERT INTO template (
+            name, description, template_path, preview_url, created_at
+        ) VALUES (
+            #{name, jdbcType=VARCHAR},
+            #{description, jdbcType=LONGVARCHAR},
+            #{content, jdbcType=VARCHAR},
+            #{previewImage, jdbcType=VARCHAR},
+            #{createdAt, jdbcType=TIMESTAMP}
+        )
+    </insert>
+
+    <update id="updateById" parameterType="org.example.dto.TemplateDTO">
+        UPDATE template
+        <set>
+            <if test="name != null">name = #{name, jdbcType=VARCHAR},</if>
+            <if test="description != null">description = #{description, jdbcType=LONGVARCHAR},</if>
+            <if test="content != null">template_path = #{content, jdbcType=VARCHAR},</if>
+            <if test="previewImage != null">preview_url = #{previewImage, jdbcType=VARCHAR},</if>
+        </set>
+        WHERE template_id = #{id, jdbcType=BIGINT}
+    </update>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        DELETE FROM template WHERE template_id = #{id, jdbcType=BIGINT}
+    </delete>
+
+    <select id="selectById" parameterType="java.lang.Long" resultMap="BaseResultMap">
+        SELECT template_id, name, description, template_path, preview_url, created_at
+        FROM template
+        WHERE template_id = #{id, jdbcType=BIGINT}
+    </select>
+
+    <select id="selectAll" resultMap="BaseResultMap">
+        SELECT template_id, name, description, template_path, preview_url, created_at
+        FROM template
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="selectByCategory" parameterType="java.lang.String" resultMap="BaseResultMap">
+        SELECT template_id, name, description, template_path, preview_url, created_at
+        FROM template
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="selectSystemTemplates" resultMap="BaseResultMap">
+        SELECT template_id, name, description, template_path, preview_url, created_at
+        FROM template
+        ORDER BY created_at DESC
+    </select>
+
+    <update id="incrementUsageCount" parameterType="java.lang.Long">
+        UPDATE template
+        SET template_id = template_id
+        WHERE template_id = #{templateId, jdbcType=BIGINT}
+    </update>
+
+</mapper>
+

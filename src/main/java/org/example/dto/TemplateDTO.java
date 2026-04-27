@@ -12,6 +12,7 @@ public class TemplateDTO {
     private String name;
     private String description;
     private String content;
+    private String sourcePath;
     private String previewImage;
     private String category;
     private Boolean isSystem;

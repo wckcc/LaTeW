@@ -71,3 +71,17 @@ export function getUserById(userId) {
   })
 }
 
+/**
+ * 修改用户名
+ * @param {number} userId - 用户ID
+ * @param {string} username - 新用户名
+ * @returns {Promise}
+ */
+export function updateUsername(userId, username) {
+  return request({
+    url: `/users/${userId}/username`,
+    method: 'put',
+    data: { username }
+  })
+}
+

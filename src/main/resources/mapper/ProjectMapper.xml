@@ -4,19 +4,19 @@
 
     <!-- 结果映射 -->
     <resultMap id="BaseResultMap" type="org.example.dto.ProjectDTO">
-        <id column="id" property="id" jdbcType="BIGINT"/>
+        <id column="project_id" property="id" jdbcType="BIGINT"/>
         <result column="name" property="name" jdbcType="VARCHAR"/>
-        <result column="content" property="content" jdbcType="LONGVARCHAR"/>
+        <result column="latex_content" property="content" jdbcType="LONGVARCHAR"/>
         <result column="user_id" property="userId" jdbcType="BIGINT"/>
         <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
         <result column="updated_at" property="updatedAt" jdbcType="TIMESTAMP"/>
     </resultMap>
 
     <!-- 插入项目 -->
-    <insert id="insert" parameterType="org.example.dto.ProjectDTO" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO projects (
+    <insert id="insert" parameterType="org.example.dto.ProjectDTO" useGeneratedKeys="true" keyProperty="id" keyColumn="project_id">
+        INSERT INTO project (
             name,
-            content,
+            latex_content,
             user_id,
             created_at,
             updated_at
@@ -32,13 +32,13 @@
     <!-- 根据用户ID查询项目列表 -->
     <select id="selectByUserId" parameterType="java.lang.Long" resultMap="BaseResultMap">
         SELECT 
-            id,
+            project_id,
             name,
-            content,
+            latex_content,
             user_id,
             created_at,
             updated_at
-        FROM projects
+        FROM project
         WHERE user_id = #{userId, jdbcType=BIGINT}
         ORDER BY updated_at DESC, created_at DESC
     </select>
@@ -46,25 +46,30 @@
     <!-- 根据项目ID查询项目 -->
     <select id="selectById" parameterType="java.lang.Long" resultMap="BaseResultMap">
         SELECT 
-            id,
+            project_id,
             name,
-            content,
+            latex_content,
             user_id,
             created_at,
             updated_at
-        FROM projects
-        WHERE id = #{id, jdbcType=BIGINT}
+        FROM project
+        WHERE project_id = #{id, jdbcType=BIGINT}
     </select>
 
     <!-- 根据项目ID更新项目 -->
     <update id="updateById" parameterType="org.example.dto.ProjectDTO">
-        UPDATE projects
+        UPDATE project
         SET 
             name = #{name, jdbcType=VARCHAR},
-            content = #{content, jdbcType=LONGVARCHAR},
+            latex_content = #{content, jdbcType=LONGVARCHAR},
             updated_at = #{updatedAt, jdbcType=TIMESTAMP}
-        WHERE id = #{id, jdbcType=BIGINT}
+        WHERE project_id = #{id, jdbcType=BIGINT}
     </update>
+
+    <delete id="deleteById" parameterType="java.lang.Long">
+        DELETE FROM project
+        WHERE project_id = #{id, jdbcType=BIGINT}
+    </delete>
 
 </mapper>
 

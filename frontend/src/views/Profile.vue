@@ -48,11 +48,26 @@
         </div>
         <div class="info-item">
           <label>用户名</label>
-          <span class="info-value">{{ userInfo.username || '-' }}</span>
+          <div class="username-edit-wrap">
+            <template v-if="editingUsername">
+              <input
+                v-model="usernameInput"
+                class="username-input"
+                maxlength="32"
+                placeholder="请输入用户名"
+              />
+              <button class="mini-btn save" @click="handleSaveUsername">保存</button>
+              <button class="mini-btn cancel" @click="cancelEditUsername">取消</button>
+            </template>
+            <template v-else>
+              <span class="info-value">{{ userInfo.username || '-' }}</span>
+              <button class="mini-btn edit" @click="startEditUsername">修改</button>
+            </template>
+          </div>
         </div>
         <div class="info-item">
-          <label>手机号</label>
-          <span class="info-value">{{ userInfo.phone || '未绑定' }}</span>
+          <label>邮箱</label>
+          <span class="info-value">{{ userInfo.email || '未绑定' }}</span>
         </div>
       </div>
 
@@ -78,7 +93,7 @@
 </template>
 
 <script>
-import { uploadAvatar, getUserById } from '../api/user'
+import { uploadAvatar, getUserById, updateUsername } from '../api/user'
 import { getUser, setUser, clearAuth } from '../utils/auth'
 
 export default {
@@ -88,9 +103,11 @@ export default {
       userInfo: {
         id: null,
         username: '',
-        phone: '',
+        email: '',
         avatar: ''
       },
+      editingUsername: false,
+      usernameInput: '',
       uploading: false,
       message: {
         show: false,
@@ -116,14 +133,16 @@ export default {
           this.userInfo = {
             id: res.data.id,
             username: res.data.username,
-            phone: res.data.phone,
+            email: res.data.email,
             avatar: res.data.avatar
           }
+          this.usernameInput = res.data.username || ''
           // 更新本地存储的用户信息
           setUser({
             userId: res.data.id,
             username: res.data.username,
-            avatar: res.data.avatar
+            avatar: res.data.avatar,
+            role: res.data.role || localUser.role || 'user'
           })
         }
       } catch (error) {
@@ -132,9 +151,50 @@ export default {
         this.userInfo = {
           id: localUser.userId,
           username: localUser.username,
-          phone: '',
+          email: '',
           avatar: localUser.avatar || ''
         }
+        this.usernameInput = localUser.username || ''
+      }
+    },
+
+    startEditUsername() {
+      this.usernameInput = this.userInfo.username || ''
+      this.editingUsername = true
+    },
+
+    cancelEditUsername() {
+      this.editingUsername = false
+      this.usernameInput = this.userInfo.username || ''
+    },
+
+    async handleSaveUsername() {
+      const nextName = (this.usernameInput || '').trim()
+      if (!nextName) {
+        this.showMessage('用户名不能为空', 'error')
+        return
+      }
+      if (nextName.length < 2 || nextName.length > 32) {
+        this.showMessage('用户名长度需在2-32个字符之间', 'error')
+        return
+      }
+      try {
+        const res = await updateUsername(this.userInfo.id, nextName)
+        if (res.data) {
+          this.userInfo.username = res.data.username || nextName
+          this.editingUsername = false
+          const localUser = getUser() || {}
+          setUser({
+            ...localUser,
+            userId: this.userInfo.id,
+            username: this.userInfo.username,
+            avatar: this.userInfo.avatar,
+            role: localUser.role || 'user'
+          })
+          this.showMessage('用户名修改成功', 'success')
+        }
+      } catch (error) {
+        this.showMessage(error.message || '用户名修改失败', 'error')
       }
     },
 
@@ -357,6 +417,49 @@ export default {
   font-size: 15px;
   color: #333;
   font-weight: 500;
+}
+
+.username-edit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.username-input {
+  width: 180px;
+  height: 32px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.username-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.mini-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mini-btn.edit {
+  background: #eef2ff;
+  color: #4b5bd6;
+}
+
+.mini-btn.save {
+  background: #e8f7ee;
+  color: #1f8b4c;
+}
+
+.mini-btn.cancel {
+  background: #f5f5f5;
+  color: #666;
 }
 
 /* 操作按钮 */

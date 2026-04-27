@@ -29,6 +29,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${avatar.upload.path:./static/avatars}")
     private String avatarUploadPath;
 
+    @Value("${image.upload.path:./static/images}")
+    private String imageUploadPath;
+
     /**
      * 添加拦截器
      */
@@ -42,6 +45,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/api/users/email/**", // 邮箱验证码接口
                         "/api/pdf/**",           // PDF静态资源
                         "/api/avatars/**",       // 头像静态资源
+                        "/api/images/**",        // 图片静态资源
                         "/error",                // 错误页面
                         "/swagger-ui/**",        // Swagger UI（如果使用）
                         "/v3/api-docs/**"        // Swagger文档（如果使用）
@@ -75,6 +79,11 @@ public class WebConfig implements WebMvcConfigurer {
         String avatarPath = Paths.get(avatarUploadPath).toAbsolutePath().toString().replace("\\", "/");
         registry.addResourceHandler("/api/avatars/**")
                 .addResourceLocations("file:" + avatarPath + "/");
+
+        // 项目图片映射
+        String imagePath = Paths.get(imageUploadPath).toAbsolutePath().toString().replace("\\", "/");
+        registry.addResourceHandler("/api/images/**")
+                .addResourceLocations("file:" + imagePath + "/");
     }
 }
 

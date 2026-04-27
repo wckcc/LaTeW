@@ -40,6 +40,15 @@ public interface UserService {
     String uploadAvatar(Long userId, MultipartFile file);
 
     /**
+     * 修改用户名
+     *
+     * @param userId 用户ID
+     * @param username 新用户名
+     * @return 更新后的用户信息
+     */
+    UserDTO updateUsername(Long userId, String username);
+
+    /**
      * 获取用户信息
      *
      * @param userId 用户ID

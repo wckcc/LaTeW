@@ -46,3 +46,35 @@ export function getSystemTemplates() {
   })
 }
 
+/**
+ * 创建模板
+ * @param {Object} templateData - 模板数据
+ * @returns {Promise}
+ */
+export function createTemplate(templateData) {
+  return request({
+    url: '/templates',
+    method: 'post',
+    data: templateData
+  })
+}
+
+/**
+ * 导入模板 zip 包（管理员）
+ * @param {File} file - zip 文件
+ * @param {String} name - 模板名称
+ * @param {String} description - 模板描述
+ * @returns {Promise}
+ */
+export function importTemplatesZip(file, name, description) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('name', name || '')
+  formData.append('description', description || '')
+  return request({
+    url: '/templates/import-zip',
+    method: 'post',
+    data: formData
+  })
+}
+

@@ -7,7 +7,9 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.example.dto.AIRequest;
 import org.example.dto.AIResponse;
+import org.example.dto.AILogDTO;
 import org.example.dto.PdfToLatexResponse;
+import org.example.mapper.AILogMapper;
 import org.example.service.AIService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,11 +17,12 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * AI助手服务实现类
@@ -29,6 +32,9 @@ public class AIServiceImpl implements AIService {
 
     @Autowired
     private WebClient.Builder webClientBuilder;
+
+    @Autowired
+    private AILogMapper aiLogMapper;
 
     @Value("${volcengine.api.url}")
     private String apiUrl;
@@ -43,6 +49,22 @@ public class AIServiceImpl implements AIService {
     private int timeout;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private void saveAiLog(AIRequest request, AIResponse response) {
+        try {
+            AILogDTO log = new AILogDTO();
+            log.setProjectId(request != null ? request.getProjectId() : null);
+            String type = request != null ? request.getType() : null;
+            log.setRequestType((type == null || type.isBlank()) ? "CHAT" : type);
+            log.setInputContent(request != null ? request.getContent() : null);
+            String output = response == null ? null : (response.getResult() != null ? response.getResult() : response.getSuggestion());
+            log.setOutputContent(output);
+            log.setCreatedAt(LocalDateTime.now());
+            aiLogMapper.insert(log);
+        } catch (Exception ignored) {
+            // 日志落库失败不影响主流程
+        }
+    }
 
     /**
      * 从PDF文件中提取文本内容
@@ -97,7 +119,7 @@ public class AIServiceImpl implements AIService {
 
         // 发送请求
         String responseBody = webClient.post()
-                .uri(apiUrl)
+                .uri(Objects.requireNonNull(apiUrl, "volcengine.api.url"))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .bodyValue(requestBody)
@@ -105,6 +127,9 @@ public class AIServiceImpl implements AIService {
                 .bodyToMono(String.class)
                 .timeout(Duration.ofSeconds(timeout))
                 .block();
+        if (responseBody == null) {
+            throw new Exception("火山引擎 API 无响应");
+        }
 
         // 解析响应
         JsonNode jsonNode = objectMapper.readTree(responseBody);
@@ -224,7 +249,7 @@ public class AIServiceImpl implements AIService {
             });
 
             String responseBody = webClient.post()
-                    .uri(apiUrl)
+                    .uri(Objects.requireNonNull(apiUrl, "volcengine.api.url"))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                     .bodyValue(requestBody)
@@ -232,6 +257,9 @@ public class AIServiceImpl implements AIService {
                     .bodyToMono(String.class)
                     .timeout(Duration.ofSeconds(timeout))
                     .block();
+            if (responseBody == null) {
+                throw new RuntimeException("火山引擎 API 无响应");
+            }
 
             JsonNode jsonNode = objectMapper.readTree(responseBody);
             JsonNode choices = jsonNode.get("choices");
@@ -256,6 +284,8 @@ public class AIServiceImpl implements AIService {
             e.printStackTrace();
             response.setResult("");
             response.setSuggestion("处理失败: " + e.getMessage());
+        } finally {
+            saveAiLog(request, response);
         }
         
         return response;

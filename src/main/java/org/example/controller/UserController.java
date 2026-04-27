@@ -10,6 +10,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Map;
+
 /**
  * 用户管理控制器
  * 提供用户的增删改查功能
@@ -72,6 +74,24 @@ public class UserController {
         try {
             String avatarUrl = userService.uploadAvatar(userId, file);
             return ResponseResult.success("头像上传成功", avatarUrl);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 修改用户名
+     * PUT /api/users/{userId}/username
+     */
+    @PutMapping("/{userId}/username")
+    public ResponseResult<UserDTO> updateUsername(
+            @PathVariable Long userId,
+            @RequestBody Map<String, String> body) {
+        try {
+            String username = body == null ? null : body.get("username");
+            UserDTO user = userService.updateUsername(userId, username);
+            user.setPassword(null);
+            return ResponseResult.success("用户名修改成功", user);
         } catch (RuntimeException e) {
             return ResponseResult.error(400, e.getMessage());
         }

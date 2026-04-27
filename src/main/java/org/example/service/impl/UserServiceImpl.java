@@ -165,7 +165,7 @@ public class UserServiceImpl implements UserService {
         String token = jwtUtil.generateToken(user.getUsername(), user.getId());
 
         // 构建并返回登录响应
-        return new UserLoginVO(token, user.getId(), user.getUsername());
+        return new UserLoginVO(token, user.getId(), user.getUsername(), user.getRole());
     }
 
     /**
@@ -265,6 +265,44 @@ public class UserServiceImpl implements UserService {
         } catch (IOException e) {
             throw new RuntimeException("头像上传失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 修改用户名
+     */
+    @Override
+    public UserDTO updateUsername(Long userId, String username) {
+        if (userId == null) {
+            throw new RuntimeException("用户ID不能为空");
+        }
+        if (username == null || username.isBlank()) {
+            throw new RuntimeException("用户名不能为空");
+        }
+
+        String trimmed = username.trim();
+        if (trimmed.length() < 2 || trimmed.length() > 32) {
+            throw new RuntimeException("用户名长度需在2-32个字符之间");
+        }
+
+        UserDTO user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        if (trimmed.equals(user.getUsername())) {
+            return user;
+        }
+
+        if (userMapper.existsByUsername(trimmed)) {
+            throw new RuntimeException("用户名已存在");
+        }
+
+        int result = userMapper.updateUsername(userId, trimmed);
+        if (result <= 0) {
+            throw new RuntimeException("修改用户名失败");
+        }
+
+        return userMapper.selectById(userId);
     }
 
     /**

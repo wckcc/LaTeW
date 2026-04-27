@@ -57,6 +57,20 @@
       <div class="content-header">
         <h1>{{ getViewTitle() }}</h1>
         <div class="header-actions">
+          <button
+            v-if="isAdmin"
+            class="import-template-btn"
+            @click="triggerTemplateImport"
+          >
+            导入模板
+          </button>
+          <input
+            ref="templateZipInput"
+            type="file"
+            accept=".zip,application/zip,application/x-zip-compressed"
+            class="hidden-file-input"
+            @change="handleTemplateZipChange"
+          />
           <div class="user-avatar-container">
             <div class="user-avatar" @click="goToProfile" title="个人中心">
               <img v-if="userAvatar" :src="userAvatar" alt="头像" class="avatar-img" />
@@ -126,24 +140,10 @@
               <td class="actions-cell">
                 <button 
                   class="action-btn" 
-                  title="打开"
-                  @click="openProject(project.id)"
-                >
-                  📁
-                </button>
-                <button 
-                  class="action-btn" 
                   title="下载"
                   @click="downloadProject(project.id)"
                 >
                   ⬇️
-                </button>
-                <button 
-                  class="action-btn" 
-                  title="PDF"
-                  @click="exportPDF(project.id)"
-                >
-                  📄
                 </button>
                 <button 
                   class="action-btn delete-btn" 
@@ -166,8 +166,9 @@
 </template>
 
 <script>
-import { getAllProjects, getProjectsByUser, deleteProject as deleteProjectAPI } from '../api/project'
+import { getAllProjects, getProjectsByUser, deleteProject as deleteProjectAPI, compileProject } from '../api/project'
 import { getUserById } from '../api/user'
+import { importTemplatesZip } from '../api/template'
 import { getUser, setUser } from '../utils/auth'
 
 export default {
@@ -185,6 +186,11 @@ export default {
     }
   },
   computed: {
+    isAdmin() {
+      const user = this.currentUser || getUser()
+      const role = user && user.role ? String(user.role).toLowerCase() : ''
+      return role === 'admin'
+    },
     filteredProjects() {
       let filtered = this.projects
       
@@ -279,12 +285,27 @@ export default {
       this.$router.push(`/editor/${id}`)
     },
     downloadProject(id) {
-      // 下载项目
-      console.log('下载项目:', id)
-    },
-    exportPDF(id) {
-      // 导出PDF
-      console.log('导出PDF:', id)
+      // 默认下载 PDF：先编译，再下载
+      compileProject(id, 'pdflatex')
+        .then((res) => {
+          const result = res && res.data ? res.data : null
+          if (!result || (result.status !== 'SUCCESS' && result.status !== 'WARNING') || !result.pdfPath) {
+            const msg = (result && (result.errorMessage || result.logContent)) || '编译失败，无法下载PDF'
+            throw new Error(msg)
+          }
+
+          const link = document.createElement('a')
+          link.href = result.pdfPath
+          link.download = ''
+          link.target = '_blank'
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+        })
+        .catch((error) => {
+          console.error('下载PDF失败:', error)
+          alert('下载失败: ' + (error.message || '未知错误'))
+        })
     },
     async deleteProject(id) {
       if (confirm('确定要删除这个项目吗？')) {
@@ -361,6 +382,45 @@ export default {
     goToProfile() {
       this.showUserMenu = false
       this.$router.push('/profile')
+    },
+    triggerTemplateImport() {
+      if (!this.isAdmin) {
+        return
+      }
+      if (this.$refs.templateZipInput) {
+        this.$refs.templateZipInput.value = ''
+        this.$refs.templateZipInput.click()
+      }
+    },
+    async handleTemplateZipChange(event) {
+      const file = event?.target?.files?.[0]
+      if (!file) {
+        return
+      }
+      if (!/\.zip$/i.test(file.name)) {
+        alert('请上传 .zip 格式文件')
+        return
+      }
+      const rawName = window.prompt('请输入模板名称')
+      const templateName = (rawName || '').trim()
+      if (!templateName) {
+        alert('模板名称不能为空')
+        return
+      }
+      const rawDescription = window.prompt('请输入模板描述')
+      const templateDescription = (rawDescription || '').trim()
+      if (!templateDescription) {
+        alert('模板描述不能为空')
+        return
+      }
+      try {
+        const res = await importTemplatesZip(file, templateName, templateDescription)
+        const count = res?.data || 0
+        alert(`模板导入成功，共导入 ${count} 个模板`)
+      } catch (error) {
+        console.error('导入模板失败:', error)
+        alert('导入模板失败: ' + (error.message || '未知错误'))
+      }
     }
   }
 }
@@ -484,6 +544,26 @@ export default {
   gap: 15px;
 }
 
+.import-template-btn {
+  border: none;
+  border-radius: 6px;
+  background: #4caf50;
+  color: #fff;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.import-template-btn:hover {
+  background: #449d48;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
 .user-avatar-container {
   position: relative;
 }
@@ -587,25 +667,42 @@ export default {
 
 .actions-cell {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
 }
 
 .action-btn {
-  background: none;
-  border: none;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f7f9fc;
+  border: 1px solid #dbe3ee;
+  color: #47607a;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  font-size: 15px;
+  transition: all 0.2s ease;
 }
 
 .action-btn:hover {
-  background-color: #f0f0f0;
+  background-color: #eaf3ff;
+  border-color: #b8d2f2;
+  color: #2d5f93;
+  transform: translateY(-1px);
+}
+
+.delete-btn {
+  color: #a04545;
+  background: #fff7f7;
+  border-color: #f0d3d3;
 }
 
 .delete-btn:hover {
-  background-color: #ffebee;
+  background-color: #ffeaea;
+  border-color: #efb7b7;
+  color: #8f2f2f;
 }
 
 .loading-cell,

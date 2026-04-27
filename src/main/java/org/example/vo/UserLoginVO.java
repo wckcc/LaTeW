@@ -25,5 +25,10 @@ public class UserLoginVO {
      * 用户名
      */
     private String username;
+
+    /**
+     * 用户角色
+     */
+    private String role;
 }
 

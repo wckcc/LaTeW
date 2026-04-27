@@ -51,5 +51,11 @@ public interface ProjectService {
      * @return 导出的 Word 文件绝对路径
      */
     String exportProjectToWord(Long projectId);
+
+    /**
+     * 删除项目
+     * @param projectId 项目ID
+     */
+    void deleteProjectById(Long projectId);
 }
 

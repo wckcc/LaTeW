@@ -29,5 +29,10 @@ public class UserDTO {
      * 用户头像URL
      */
     private String avatar;
+
+    /**
+     * 用户角色（如 user/admin）
+     */
+    private String role;
 }
 

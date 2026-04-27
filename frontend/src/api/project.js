@@ -112,6 +112,44 @@ export function createProjectFromPdf(file, projectName) {
 }
 
 /**
+ * 上传项目图片资源（用于 LaTeX includegraphics）
+ * @param {Number} id - 项目ID
+ * @param {File} file - 图片文件
+ * @returns {Promise}
+ */
+export function uploadProjectImage(id, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: `/projects/${id}/images`,
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+/**
+ * 通过URL上传项目图片资源
+ * @param {Number} id - 项目ID
+ * @param {String} imageUrl - 图片URL
+ * @returns {Promise}
+ */
+export function uploadProjectImageByUrl(id, imageUrl) {
+  const formData = new FormData()
+  formData.append('imageUrl', imageUrl)
+  return request({
+    url: `/projects/${id}/images/from-url`,
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+/**
  * 导出项目为Word文档（docx）
  * @param {Number} id - 项目ID
  * @returns {Promise<Blob>}
@@ -120,6 +158,21 @@ export function exportProjectWord(id) {
   const token = getToken()
   return axios({
     url: `/api/projects/${id}/export-word`,
+    method: 'get',
+    responseType: 'blob',
+    headers: token ? { token } : {}
+  })
+}
+
+/**
+ * 导出项目为LaTeX源文件（tex）
+ * @param {Number} id - 项目ID
+ * @returns {Promise<Blob>}
+ */
+export function exportProjectLatex(id) {
+  const token = getToken()
+  return axios({
+    url: `/api/projects/${id}/export-latex`,
     method: 'get',
     responseType: 'blob',
     headers: token ? { token } : {}
