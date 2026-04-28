@@ -13,7 +13,9 @@ export default {
 <style>
 #app {
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
 </style>
 

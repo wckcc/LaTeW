@@ -429,15 +429,19 @@ export default {
 <style scoped>
 .projects-container {
   display: flex;
-  height: 100vh;
-  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding: 24px;
+  gap: 20px;
 }
 
-/* 左侧边栏 */
 .sidebar {
   width: 250px;
-  background-color: #fff;
-  border-right: 1px solid #e0e0e0;
+  background: var(--fluent-surface);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid var(--fluent-border);
+  border-radius: var(--fluent-radius-lg);
+  box-shadow: var(--fluent-shadow);
   display: flex;
   flex-direction: column;
   padding: 20px;
@@ -446,20 +450,22 @@ export default {
 
 .create-project-btn {
   width: 100%;
+  min-height: 46px;
   padding: 12px;
-  background-color: #4caf50;
+  background: linear-gradient(135deg, #0f6cbd 0%, #4f8cff 100%);
   color: white;
-  border: none;
-  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 16px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   margin-bottom: 20px;
-  transition: background-color 0.3s;
+  box-shadow: 0 16px 28px rgba(15, 108, 189, 0.2);
 }
 
 .create-project-btn:hover {
-  background-color: #45a049;
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #115ea3 0%, #3d7ff2 100%);
 }
 
 .sidebar-nav {
@@ -467,28 +473,32 @@ export default {
 }
 
 .nav-item {
-  padding: 10px 12px;
+  padding: 12px 14px;
   cursor: pointer;
-  border-radius: 4px;
-  margin-bottom: 4px;
-  color: #666;
-  transition: background-color 0.2s;
+  border-radius: 14px;
+  margin-bottom: 6px;
+  color: var(--fluent-text-2);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .nav-item:hover {
-  background-color: #f0f0f0;
+  background: rgba(255, 255, 255, 0.54);
+  border-color: rgba(148, 173, 211, 0.24);
 }
 
 .nav-item.active {
-  background-color: #e8f5e9;
-  color: #4caf50;
-  font-weight: 500;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(223, 236, 255, 0.72));
+  color: var(--fluent-accent);
+  font-weight: 600;
+  border-color: rgba(15, 108, 189, 0.18);
+  box-shadow: 0 10px 20px rgba(71, 104, 158, 0.1);
 }
 
 .tags-section {
   margin-top: auto;
   padding-top: 20px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .tags-header {
@@ -497,30 +507,34 @@ export default {
   align-items: center;
   margin-bottom: 10px;
   font-size: 14px;
-  color: #666;
+  color: var(--fluent-text-2);
 }
 
 .new-tag-btn {
   background: none;
   border: none;
-  color: #4caf50;
+  color: var(--fluent-accent);
   cursor: pointer;
   font-size: 14px;
   padding: 0;
+  font-weight: 600;
 }
 
 .new-tag-btn:hover {
   text-decoration: underline;
 }
 
-
-/* 主内容区 */
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background-color: #fff;
+  background: var(--fluent-surface);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid var(--fluent-border);
+  border-radius: var(--fluent-radius-lg);
+  box-shadow: var(--fluent-shadow);
 }
 
 .content-header {
@@ -528,14 +542,14 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 20px 30px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .content-header h1 {
   margin: 0;
-  font-size: 24px;
-  font-weight: 500;
-  color: #333;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--fluent-text-1);
 }
 
 .header-actions {
@@ -545,19 +559,20 @@ export default {
 }
 
 .import-template-btn {
-  border: none;
-  border-radius: 6px;
-  background: #4caf50;
-  color: #fff;
+  border: 1px solid rgba(148, 173, 211, 0.26);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--fluent-accent);
   padding: 9px 14px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  box-shadow: 0 8px 20px rgba(84, 117, 172, 0.1);
 }
 
 .import-template-btn:hover {
-  background: #449d48;
+  background: rgba(240, 247, 255, 0.92);
+  border-color: rgba(15, 108, 189, 0.2);
 }
 
 .hidden-file-input {
@@ -572,7 +587,7 @@ export default {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0f6cbd 0%, #76a9ff 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -585,8 +600,8 @@ export default {
 }
 
 .user-avatar:hover {
-  transform: scale(1.08);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(15, 108, 189, 0.24);
 }
 
 .avatar-img {
@@ -597,21 +612,24 @@ export default {
 
 .search-bar {
   padding: 15px 30px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .search-input {
   width: 100%;
   max-width: 500px;
-  padding: 10px 15px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  min-height: 46px;
+  padding: 10px 16px;
+  border: 1px solid rgba(125, 151, 194, 0.3);
+  border-radius: 16px;
   font-size: 14px;
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #4caf50;
+  border-color: rgba(15, 108, 189, 0.5);
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.14);
 }
 
 .projects-table-container {
@@ -622,12 +640,12 @@ export default {
 
 .projects-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 10px;
   margin-top: 20px;
 }
 
 .projects-table thead {
-  background-color: #f9f9f9;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -636,33 +654,44 @@ export default {
 .projects-table th {
   padding: 12px;
   text-align: left;
-  font-weight: 500;
-  color: #666;
+  font-weight: 600;
+  color: var(--fluent-text-2);
   font-size: 14px;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .projects-table td {
-  padding: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 16px 12px;
   font-size: 15px;
-  color: #333;
+  color: var(--fluent-text-1);
+  background: rgba(255, 255, 255, 0.62);
+  border-top: 1px solid rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(132, 160, 207, 0.12);
 }
 
 .projects-table tbody tr:hover {
-  background-color: #f9f9f9;
+  transform: translateY(-1px);
+}
+
+.projects-table tbody tr td:first-child {
+  border-radius: 16px 0 0 16px;
+}
+
+.projects-table tbody tr td:last-child {
+  border-radius: 0 16px 16px 0;
 }
 
 .project-title span {
   font-size: 15px;
-  color: #000;
+  color: var(--fluent-text-1);
   cursor: pointer;
   text-decoration: none;
   transition: color 0.2s;
+  font-weight: 600;
 }
 
 .project-title span:hover {
-  color: #4caf50;
+  color: var(--fluent-accent);
 }
 
 .actions-cell {
@@ -672,31 +701,31 @@ export default {
 }
 
 .action-btn {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #f7f9fc;
-  border: 1px solid #dbe3ee;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(125, 151, 194, 0.22);
   color: #47607a;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 15px;
   transition: all 0.2s ease;
 }
 
 .action-btn:hover {
-  background-color: #eaf3ff;
-  border-color: #b8d2f2;
-  color: #2d5f93;
+  background-color: rgba(233, 243, 255, 0.95);
+  border-color: rgba(15, 108, 189, 0.22);
+  color: var(--fluent-accent);
   transform: translateY(-1px);
 }
 
 .delete-btn {
   color: #a04545;
-  background: #fff7f7;
-  border-color: #f0d3d3;
+  background: rgba(255, 243, 243, 0.9);
+  border-color: rgba(196, 43, 28, 0.16);
 }
 
 .delete-btn:hover {
@@ -709,15 +738,17 @@ export default {
 .empty-cell {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--fluent-text-3);
+  background: transparent !important;
+  border: none !important;
 }
 
 .projects-footer {
   padding: 15px 30px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid rgba(132, 160, 207, 0.16);
   font-size: 14px;
-  color: #666;
-  background-color: #f9f9f9;
+  color: var(--fluent-text-2);
+  background: rgba(255, 255, 255, 0.34);
 }
 </style>
 

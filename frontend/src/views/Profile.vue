@@ -276,8 +276,7 @@ export default {
 <style scoped>
 .profile-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  padding: 28px 20px;
   box-sizing: border-box;
 }
 
@@ -287,35 +286,39 @@ export default {
 }
 
 .back-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  border: none;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--fluent-text-1);
+  border: 1px solid rgba(132, 160, 207, 0.18);
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 14px;
   cursor: pointer;
   font-size: 14px;
-  transition: background 0.3s;
+  font-weight: 600;
 }
 
 .back-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(240, 247, 255, 0.92);
+  color: var(--fluent-accent);
 }
 
 .profile-card {
   max-width: 500px;
   margin: 0 auto;
-  background: white;
-  border-radius: 16px;
+  background: var(--fluent-surface);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border-radius: var(--fluent-radius-lg);
+  border: 1px solid var(--fluent-border);
   padding: 40px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--fluent-shadow);
 }
 
 .page-title {
   text-align: center;
   font-size: 28px;
-  color: #333;
+  color: var(--fluent-text-1);
   margin: 0 0 30px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* 头像区域 */
@@ -333,7 +336,8 @@ export default {
   border-radius: 50%;
   overflow: hidden;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 16px 28px rgba(71, 104, 158, 0.16);
+  border: 2px solid rgba(255, 255, 255, 0.78);
 }
 
 .avatar-image {
@@ -345,7 +349,7 @@ export default {
 .avatar-placeholder {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0f6cbd 0%, #76a9ff 100%);
   color: white;
   display: flex;
   align-items: center;
@@ -360,7 +364,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: linear-gradient(180deg, rgba(15, 108, 189, 0.15), rgba(22, 32, 51, 0.72));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -385,13 +389,12 @@ export default {
 .avatar-hint {
   margin-top: 12px;
   font-size: 12px;
-  color: #999;
+  color: var(--fluent-text-3);
   text-align: center;
 }
 
-/* 用户信息区域 */
 .info-section {
-  border-top: 1px solid #eee;
+  border-top: 1px solid rgba(132, 160, 207, 0.16);
   padding-top: 25px;
   margin-bottom: 30px;
 }
@@ -401,7 +404,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   padding: 15px 0;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid rgba(132, 160, 207, 0.12);
 }
 
 .info-item:last-child {
@@ -410,13 +413,13 @@ export default {
 
 .info-item label {
   font-size: 14px;
-  color: #666;
+  color: var(--fluent-text-2);
 }
 
 .info-value {
   font-size: 15px;
-  color: #333;
-  font-weight: 500;
+  color: var(--fluent-text-1);
+  font-weight: 600;
 }
 
 .username-edit-wrap {
@@ -428,41 +431,44 @@ export default {
 .username-input {
   width: 180px;
   height: 32px;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
+  border: 1px solid rgba(125, 151, 194, 0.28);
+  border-radius: 10px;
   padding: 0 10px;
   font-size: 14px;
+  background: rgba(255, 255, 255, 0.76);
 }
 
 .username-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: rgba(15, 108, 189, 0.5);
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.14);
 }
 
 .mini-btn {
-  border: none;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   padding: 6px 10px;
   font-size: 12px;
   cursor: pointer;
+  font-weight: 600;
 }
 
 .mini-btn.edit {
-  background: #eef2ff;
-  color: #4b5bd6;
+  background: rgba(223, 236, 255, 0.72);
+  color: var(--fluent-accent);
 }
 
 .mini-btn.save {
-  background: #e8f7ee;
-  color: #1f8b4c;
+  background: rgba(218, 242, 221, 0.85);
+  color: var(--fluent-success);
 }
 
 .mini-btn.cancel {
-  background: #f5f5f5;
-  color: #666;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--fluent-text-2);
+  border-color: rgba(132, 160, 207, 0.18);
 }
 
-/* 操作按钮 */
 .action-section {
   display: flex;
   justify-content: center;
@@ -471,29 +477,28 @@ export default {
 .logout-btn {
   width: 100%;
   padding: 14px;
-  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  background: linear-gradient(135deg, #d13438 0%, #c42b1c 100%);
   color: white;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 16px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .logout-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 30px rgba(196, 43, 28, 0.24);
 }
 
-/* 上传进度弹窗 */
 .upload-modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(18, 24, 38, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -501,18 +506,20 @@ export default {
 }
 
 .upload-modal-content {
-  background: white;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(24px) saturate(150%);
   padding: 30px 50px;
-  border-radius: 12px;
+  border-radius: 20px;
   text-align: center;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--fluent-shadow);
+  border: 1px solid var(--fluent-border);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
   border: 4px solid #f3f3f3;
-  border-top: 4px solid #667eea;
+  border-top: 4px solid var(--fluent-accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin: 0 auto 15px;
@@ -525,18 +532,17 @@ export default {
 
 .upload-modal-content p {
   margin: 0;
-  color: #333;
+  color: var(--fluent-text-1);
   font-size: 14px;
 }
 
-/* 提示消息 */
 .message-toast {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
   padding: 12px 30px;
-  border-radius: 8px;
+  border-radius: 14px;
   font-size: 14px;
   font-weight: 500;
   z-index: 2000;
@@ -544,15 +550,15 @@ export default {
 }
 
 .message-toast.success {
-  background: #d4edda;
+  background: rgba(218, 242, 221, 0.94);
   color: #155724;
-  border: 1px solid #c3e6cb;
+  border: 1px solid rgba(16, 124, 16, 0.14);
 }
 
 .message-toast.error {
-  background: #f8d7da;
+  background: rgba(250, 223, 224, 0.94);
   color: #721c24;
-  border: 1px solid #f5c6cb;
+  border: 1px solid rgba(196, 43, 28, 0.14);
 }
 
 @keyframes slideDown {

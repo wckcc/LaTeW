@@ -373,17 +373,19 @@ export default {
 <style scoped>
 .new-project-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 40px 20px;
+  padding: 32px 20px;
   display: flex;
   justify-content: center;
   align-items: flex-start;
 }
 
 .new-project-box {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  background: var(--fluent-surface);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border-radius: var(--fluent-radius-lg);
+  border: 1px solid var(--fluent-border);
+  box-shadow: var(--fluent-shadow);
   padding: 40px;
   width: 100%;
   max-width: 1000px;
@@ -397,34 +399,34 @@ export default {
   align-items: center;
   margin-bottom: 30px;
   padding-bottom: 20px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .header h1 {
   margin: 0;
   font-size: 28px;
-  color: #333;
-  font-weight: 600;
+  color: var(--fluent-text-1);
+  font-weight: 700;
 }
 
 .close-btn {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(132, 160, 207, 0.2);
   font-size: 32px;
-  color: #999;
+  color: var(--fluent-text-2);
   cursor: pointer;
   width: 40px;
   height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 16px;
   transition: all 0.2s;
 }
 
 .close-btn:hover {
-  background: #f5f5f5;
-  color: #333;
+  background: rgba(240, 247, 255, 0.92);
+  color: var(--fluent-accent);
 }
 
 .options-container {
@@ -435,24 +437,25 @@ export default {
 }
 
 .option-card {
-  border: 2px solid #e0e0e0;
-  border-radius: 12px;
+  border: 1px solid rgba(132, 160, 207, 0.16);
+  border-radius: 20px;
   padding: 30px 20px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.3s;
-  background: white;
+  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 10px 24px rgba(71, 104, 158, 0.08);
 }
 
 .option-card:hover {
-  border-color: #667eea;
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  border-color: rgba(15, 108, 189, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 18px 34px rgba(71, 104, 158, 0.14);
 }
 
 .option-card.active {
-  border-color: #667eea;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-color: rgba(15, 108, 189, 0.24);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(223, 236, 255, 0.74));
 }
 
 .option-icon {
@@ -463,21 +466,21 @@ export default {
 .option-card h3 {
   margin: 0 0 8px 0;
   font-size: 18px;
-  color: #333;
+  color: var(--fluent-text-1);
   font-weight: 600;
 }
 
 .option-card p {
   margin: 0;
   font-size: 14px;
-  color: #666;
+  color: var(--fluent-text-2);
 }
 
 .template-section,
 .import-section {
   margin-top: 30px;
   padding-top: 30px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .section-header {
@@ -487,8 +490,8 @@ export default {
 .section-header h2 {
   margin: 0 0 16px 0;
   font-size: 20px;
-  color: #333;
-  font-weight: 600;
+  color: var(--fluent-text-1);
+  font-weight: 700;
 }
 
 .category-filter {
@@ -499,31 +502,31 @@ export default {
 
 .category-btn {
   padding: 8px 16px;
-  border: 1px solid #ddd;
-  border-radius: 20px;
-  background: white;
-  color: #666;
+  border: 1px solid rgba(132, 160, 207, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--fluent-text-2);
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s;
 }
 
 .category-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: rgba(15, 108, 189, 0.22);
+  color: var(--fluent-accent);
 }
 
 .category-btn.active {
-  background: #667eea;
+  background: linear-gradient(135deg, #0f6cbd 0%, #4f8cff 100%);
   color: white;
-  border-color: #667eea;
+  border-color: transparent;
 }
 
 .loading,
 .empty-templates {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--fluent-text-3);
 }
 
 .templates-grid {
@@ -533,29 +536,29 @@ export default {
 }
 
 .template-card {
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  border: 1px solid rgba(132, 160, 207, 0.16);
+  border-radius: 18px;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s;
-  background: white;
+  background: rgba(255, 255, 255, 0.64);
 }
 
 .template-card:hover {
-  border-color: #667eea;
+  border-color: rgba(15, 108, 189, 0.22);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 18px 34px rgba(71, 104, 158, 0.14);
 }
 
 .template-card.selected {
-  border-color: #667eea;
-  background: rgba(102, 126, 234, 0.05);
+  border-color: rgba(15, 108, 189, 0.24);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(223, 236, 255, 0.72));
 }
 
 .template-preview {
   width: 100%;
   height: 150px;
-  background: #f5f5f5;
+  background: rgba(239, 245, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -579,14 +582,14 @@ export default {
 .template-info h4 {
   margin: 0 0 8px 0;
   font-size: 16px;
-  color: #333;
+  color: var(--fluent-text-1);
   font-weight: 600;
 }
 
 .template-info p {
   margin: 0 0 12px 0;
   font-size: 14px;
-  color: #666;
+  color: var(--fluent-text-2);
   line-height: 1.4;
 }
 
@@ -598,28 +601,28 @@ export default {
 }
 
 .category-tag {
-  background: #e8f5e9;
-  color: #4caf50;
+  background: rgba(15, 108, 189, 0.1);
+  color: var(--fluent-accent);
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 999px;
 }
 
 .usage-count {
-  color: #999;
+  color: var(--fluent-text-3);
 }
 
 .upload-area {
-  border: 2px dashed #ddd;
-  border-radius: 12px;
+  border: 1px dashed rgba(125, 151, 194, 0.42);
+  border-radius: 24px;
   padding: 60px 20px;
   text-align: center;
   transition: all 0.3s;
-  background: #fafafa;
+  background: rgba(255, 255, 255, 0.54);
 }
 
 .upload-area.drag-over {
-  border-color: #667eea;
-  background: rgba(102, 126, 234, 0.05);
+  border-color: rgba(15, 108, 189, 0.32);
+  background: rgba(223, 236, 255, 0.68);
 }
 
 .upload-content {
@@ -635,37 +638,38 @@ export default {
 
 .upload-text {
   font-size: 18px;
-  color: #333;
+  color: var(--fluent-text-1);
   margin: 0 0 8px 0;
   font-weight: 500;
 }
 
 .upload-hint {
   font-size: 14px;
-  color: #999;
+  color: var(--fluent-text-3);
   margin: 0 0 20px 0;
 }
 
 .upload-btn {
   padding: 10px 24px;
-  background: #667eea;
+  background: linear-gradient(135deg, #0f6cbd 0%, #4f8cff 100%);
   color: white;
-  border: none;
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 14px;
   cursor: pointer;
   font-size: 14px;
-  transition: background 0.2s;
+  box-shadow: 0 14px 24px rgba(15, 108, 189, 0.18);
 }
 
 .upload-btn:hover {
-  background: #5568d3;
+  background: linear-gradient(135deg, #115ea3 0%, #3d7ff2 100%);
 }
 
 .file-info {
   margin-top: 20px;
   padding: 16px;
-  background: #f5f5f5;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 18px;
+  border: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .file-name {
@@ -673,26 +677,26 @@ export default {
   align-items: center;
   gap: 10px;
   font-size: 14px;
-  color: #333;
+  color: var(--fluent-text-1);
 }
 
 .file-size {
-  color: #999;
+  color: var(--fluent-text-3);
   font-size: 12px;
 }
 
 .file-hint {
   margin-top: 12px;
   padding: 12px;
-  background: #e3f2fd;
-  border-radius: 6px;
-  border-left: 3px solid #2196f3;
+  background: rgba(223, 236, 255, 0.7);
+  border-radius: 14px;
+  border: 1px solid rgba(15, 108, 189, 0.12);
 }
 
 .file-hint p {
   margin: 0;
   font-size: 13px;
-  color: #1976d2;
+  color: var(--fluent-accent);
   line-height: 1.5;
 }
 
@@ -713,36 +717,38 @@ export default {
 }
 
 .remove-file:hover {
-  background: rgba(231, 76, 60, 0.1);
+  background: rgba(231, 76, 60, 0.12);
 }
 
 .project-name-section {
   margin-top: 30px;
   padding-top: 30px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .project-name-section label {
   display: block;
   margin-bottom: 8px;
   font-size: 14px;
-  color: #333;
-  font-weight: 500;
+  color: var(--fluent-text-2);
+  font-weight: 600;
 }
 
 .project-name-input {
   width: 100%;
+  min-height: 46px;
   padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid rgba(125, 151, 194, 0.3);
+  border-radius: 16px;
   font-size: 14px;
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .project-name-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: rgba(15, 108, 189, 0.5);
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.14);
 }
 
 .actions {
@@ -751,37 +757,39 @@ export default {
   gap: 12px;
   margin-top: 30px;
   padding-top: 30px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid rgba(132, 160, 207, 0.16);
 }
 
 .cancel-btn,
 .create-btn {
   padding: 12px 24px;
-  border: none;
-  border-radius: 8px;
+  border-radius: 14px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .cancel-btn {
-  background: #f5f5f5;
-  color: #666;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(132, 160, 207, 0.18);
+  color: var(--fluent-text-2);
 }
 
 .cancel-btn:hover {
-  background: #e0e0e0;
+  background: rgba(240, 247, 255, 0.92);
 }
 
 .create-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0f6cbd 0%, #4f8cff 100%);
   color: white;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 16px 28px rgba(15, 108, 189, 0.22);
 }
 
 .create-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 20px 32px rgba(15, 108, 189, 0.28);
 }
 
 .create-btn:disabled {

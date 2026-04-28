@@ -4,16 +4,105 @@
   box-sizing: border-box;
 }
 
+:root {
+  color-scheme: light;
+  --fluent-bg-1: #f6f9ff;
+  --fluent-bg-2: #edf4ff;
+  --fluent-bg-3: #ddeaff;
+  --fluent-surface: rgba(255, 255, 255, 0.72);
+  --fluent-surface-strong: rgba(255, 255, 255, 0.84);
+  --fluent-surface-solid: #ffffff;
+  --fluent-border: rgba(255, 255, 255, 0.72);
+  --fluent-border-subtle: rgba(132, 160, 207, 0.22);
+  --fluent-shadow: 0 18px 48px rgba(71, 104, 158, 0.16);
+  --fluent-shadow-hover: 0 24px 56px rgba(71, 104, 158, 0.2);
+  --fluent-text-1: #162033;
+  --fluent-text-2: #4c5b73;
+  --fluent-text-3: #6f7f98;
+  --fluent-accent: #0f6cbd;
+  --fluent-accent-strong: #115ea3;
+  --fluent-accent-soft: rgba(15, 108, 189, 0.12);
+  --fluent-success: #107c10;
+  --fluent-danger: #c42b1c;
+  --fluent-warning: #a15c00;
+  --fluent-radius-sm: 12px;
+  --fluent-radius-md: 18px;
+  --fluent-radius-lg: 24px;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100%;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  color: var(--fluent-text-1);
+  background:
+    radial-gradient(circle at top left, rgba(186, 210, 255, 0.9), transparent 34%),
+    radial-gradient(circle at top right, rgba(202, 228, 255, 0.82), transparent 28%),
+    linear-gradient(180deg, var(--fluent-bg-1) 0%, var(--fluent-bg-2) 42%, var(--fluent-bg-3) 100%);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-#app {
-  width: 100%;
-  height: 100vh;
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.08)),
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.46), transparent 22%);
+  opacity: 0.75;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+input,
+textarea,
+select {
+  color: var(--fluent-text-1);
+}
+
+::selection {
+  background: rgba(15, 108, 189, 0.2);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(98, 125, 173, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 

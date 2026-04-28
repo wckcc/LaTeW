@@ -115,33 +115,36 @@ export default {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  padding: 32px;
 }
 
 .login-box {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  background: var(--fluent-surface);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border: 1px solid var(--fluent-border);
+  border-radius: var(--fluent-radius-lg);
+  box-shadow: var(--fluent-shadow);
   padding: 40px;
   width: 100%;
-  max-width: 400px;
+  max-width: 430px;
 }
 
 .login-header {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 28px;
 }
 
 .login-header h1 {
-  font-size: 32px;
-  color: #333;
-  margin: 0 0 8px 0;
-  font-weight: 600;
+  font-size: 34px;
+  color: var(--fluent-text-1);
+  margin: 0 0 10px 0;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .login-header p {
-  color: #666;
+  color: var(--fluent-text-2);
   margin: 0;
   font-size: 14px;
 }
@@ -149,28 +152,32 @@ export default {
 .login-form {
   display: flex;
   flex-direction: column;
+  gap: 18px;
 }
 
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
 
 .form-group label {
   display: block;
   margin-bottom: 8px;
-  color: #333;
-  font-size: 14px;
-  font-weight: 500;
+  color: var(--fluent-text-2);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .form-group input {
   width: 100%;
+  min-height: 46px;
   padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid rgba(125, 151, 194, 0.3);
+  border-radius: 14px;
   font-size: 14px;
-  transition: all 0.3s;
+  transition: all 0.2s ease;
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .code-input-wrapper {
@@ -186,14 +193,15 @@ export default {
 
 .code-send-btn {
   flex: 0 0 auto;
-  background: #f0f3ff;
-  border: 1px solid #d5d9ff;
-  color: #4b5bd6;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(125, 151, 194, 0.3);
+  color: var(--fluent-accent);
+  border-radius: 14px;
   padding: 0 12px;
-  height: 44px;
+  height: 46px;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(84, 117, 172, 0.12);
 }
 
 .code-send-btn:disabled {
@@ -203,52 +211,52 @@ export default {
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: rgba(15, 108, 189, 0.5);
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.14);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .form-group input:disabled {
-  background-color: #f5f5f5;
+  background-color: rgba(244, 247, 253, 0.8);
   cursor: not-allowed;
 }
 
 .error-message {
-  color: #e74c3c;
+  color: #7e2b2e;
   font-size: 14px;
-  margin-bottom: 16px;
-  padding: 10px;
-  background-color: #fee;
-  border-radius: 6px;
-  border: 1px solid #fcc;
+  padding: 12px 14px;
+  background: rgba(250, 223, 224, 0.78);
+  border-radius: 14px;
+  border: 1px solid rgba(196, 43, 28, 0.16);
 }
 
 .success-message {
-  color: #27ae60;
+  color: #145f32;
   font-size: 14px;
-  margin-bottom: 16px;
-  padding: 10px;
-  background-color: #d4edda;
-  border-radius: 6px;
-  border: 1px solid #c3e6cb;
+  padding: 12px 14px;
+  background-color: rgba(218, 242, 221, 0.85);
+  border-radius: 14px;
+  border: 1px solid rgba(16, 124, 16, 0.14);
 }
 
 .submit-btn {
   width: 100%;
+  min-height: 48px;
   padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0f6cbd 0%, #4f8cff 100%);
   color: white;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 16px;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
-  margin-top: 10px;
+  box-shadow: 0 16px 28px rgba(15, 108, 189, 0.22);
 }
 
 .submit-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 20px 32px rgba(15, 108, 189, 0.28);
+  background: linear-gradient(135deg, #115ea3 0%, #3d7ff2 100%);
 }
 
 .submit-btn:disabled {
@@ -258,16 +266,16 @@ export default {
 
 .form-footer {
   text-align: center;
-  margin-top: 20px;
+  margin-top: 2px;
   font-size: 14px;
-  color: #666;
+  color: var(--fluent-text-2);
 }
 
 .form-footer .link {
-  color: #667eea;
+  color: var(--fluent-accent);
   text-decoration: none;
   margin-left: 5px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .form-footer .link:hover {
