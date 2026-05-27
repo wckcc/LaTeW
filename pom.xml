@@ -77,6 +77,13 @@
             <version>2.15.1</version>
         </dependency>
 
+        <!-- Apache Commons Compress - zip 解压（UTF-8 文件名非法字节时替换而非抛 MalformedInputException） -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.26.2</version>
+        </dependency>
+
         <!-- Apache Commons Lang - 字符串和对象工具 -->
         <dependency>
             <groupId>org.apache.commons</groupId>

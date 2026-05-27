@@ -3,24 +3,25 @@ package org.example.service.impl;
 import org.example.dto.TemplateDTO;
 import org.example.mapper.TemplateMapper;
 import org.example.service.TemplateService;
+import org.example.util.ZipLatexBundleUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 /**
  * 模板服务实现类
@@ -29,8 +30,23 @@ import java.util.zip.ZipInputStream;
 @Transactional
 public class TemplateServiceImpl implements TemplateService {
 
+    /** 与 {@link org.example.util.ProjectBundleWorkspaceUtil#PREFIX} 一致；仅用于解析历史/少量首行标记数据 */
+    private static final String TEMPLATE_SOURCE_PREFIX = "%TEMPLATE_SOURCE_PATH=";
+
     @Autowired
     private TemplateMapper templateMapper;
+
+    /**
+     * 按 UTF-8 宽松解码：非法字节替换为占位符，避免因 GBK 等编码导致 {@link java.nio.charset.MalformedInputException}。
+     */
+    private static String readLenientUtf8(Path path) throws IOException {
+        byte[] bytes = Files.readAllBytes(path);
+        return StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(CodingErrorAction.REPLACE)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString();
+    }
 
     private String persistTemplateContent(String rawContent) {
         if (rawContent == null || rawContent.isBlank()) {
@@ -79,28 +95,53 @@ public class TemplateServiceImpl implements TemplateService {
         if (template.getUpdatedAt() == null) {
             template.setUpdatedAt(template.getCreatedAt());
         }
-        // 数据库存的是 template_path，尽量展开成可直接创建项目的 LaTeX 内容
+        // 数据库存的是 template_path（磁盘路径字符串），展开成正文并带上 sourcePath 供「从模板创建项目」使用
         if (template.getContent() == null || template.getContent().isBlank()) {
             template.setContent("\\documentclass{article}\n\\begin{document}\n\n\\end{document}");
         } else {
-            String candidatePath = template.getContent().trim();
-            try {
-                Path path = Paths.get(candidatePath);
-                if (!path.isAbsolute()) {
-                    path = Paths.get(".").resolve(candidatePath).normalize();
+            String raw = template.getContent();
+            String normalized = raw.replace("\r\n", "\n");
+            // 历史或手工数据：仅首行标记；正文必须从磁盘读（库字段通常为 VARCHAR，不能存全文）
+            if (normalized.trim().startsWith(TEMPLATE_SOURCE_PREFIX)) {
+                int firstNl = normalized.indexOf('\n');
+                String firstLine = firstNl >= 0 ? normalized.substring(0, firstNl) : normalized;
+                String pathStr = firstLine.substring(TEMPLATE_SOURCE_PREFIX.length()).trim();
+                resolveTemplateFromTexPath(template, pathStr);
+            } else {
+                String candidatePath = template.getContent().trim();
+                if (!candidatePath.contains("\n") && !candidatePath.contains("\r")) {
+                    resolveTemplateFromTexPath(template, candidatePath);
                 }
-                if (Files.exists(path) && Files.isRegularFile(path)) {
-                    template.setSourcePath(path.toString());
-                    String latexContent = Files.readString(path, StandardCharsets.UTF_8);
-                    if (latexContent != null && !latexContent.isBlank()) {
-                        template.setContent(latexContent);
-                    }
-                }
-            } catch (Exception ignored) {
-                // 路径不可读时保留原值，避免模板接口失败
             }
         }
         return template;
+    }
+
+    /**
+     * template_path 存主 .tex 绝对路径时：始终设置 sourcePath；正文优先从该文件读取。
+     */
+    private void resolveTemplateFromTexPath(TemplateDTO template, String pathStr) {
+        if (pathStr == null || pathStr.isBlank()) {
+            return;
+        }
+        try {
+            Path path = Paths.get(pathStr.trim());
+            if (!path.isAbsolute()) {
+                path = Paths.get(".").resolve(pathStr.trim()).normalize();
+            }
+            path = path.toAbsolutePath().normalize();
+            if (pathStr.trim().toLowerCase(Locale.ROOT).endsWith(".tex")) {
+                template.setSourcePath(path.toString());
+            }
+            if (Files.exists(path) && Files.isRegularFile(path)) {
+                String latexContent = readLenientUtf8(path);
+                if (latexContent != null && !latexContent.isBlank()) {
+                    template.setContent(latexContent);
+                }
+            }
+        } catch (Exception ignored) {
+            // 路径不可解析时保留库中原值
+        }
     }
 
     private String sanitizeTemplateName(String rawName) {
@@ -109,6 +150,38 @@ public class TemplateServiceImpl implements TemplateService {
             return "导入模板";
         }
         return base.length() > 100 ? base.substring(0, 100) : base;
+    }
+
+    /**
+     * 多个 .tex 时整包只对应一个模板，主文件固定为 main.tex（优先 bundle 根目录下的 main.tex）。
+     */
+    private Path resolvePrimaryTexPath(List<Path> texFiles, Path bundleDir) throws IOException {
+        List<Path> nonEmpty = new ArrayList<>();
+        for (Path p : texFiles) {
+            if (Files.isRegularFile(p) && Files.size(p) > 0) {
+                nonEmpty.add(p.toAbsolutePath().normalize());
+            }
+        }
+        if (nonEmpty.isEmpty()) {
+            return null;
+        }
+        if (nonEmpty.size() == 1) {
+            return nonEmpty.get(0);
+        }
+        Path bundleAbs = bundleDir.toAbsolutePath().normalize();
+        Path rootMain = bundleAbs.resolve("main.tex").normalize();
+        if (nonEmpty.contains(rootMain)) {
+            return rootMain;
+        }
+        Path anyMain = nonEmpty.stream()
+                .filter(p -> p.getFileName().toString().equalsIgnoreCase("main.tex"))
+                .min(Comparator.comparingInt(Path::getNameCount))
+                .orElse(null);
+        if (anyMain == null) {
+            throw new RuntimeException(
+                    "zip 中包含多个 .tex 文件时，请提供 main.tex 作为主文件（建议放在包根目录）");
+        }
+        return anyMain;
     }
 
     @Override
@@ -225,97 +298,43 @@ public class TemplateServiceImpl implements TemplateService {
 
     @Override
     public int importTemplatesFromZip(MultipartFile zipFile, String templateName, String templateDescription) {
-        if (zipFile == null || zipFile.isEmpty()) {
-            throw new RuntimeException("zip 文件不能为空");
-        }
         String normalizedName = sanitizeTemplateName(templateName);
         String normalizedDescription = templateDescription == null ? "" : templateDescription.trim();
         if (normalizedDescription.isEmpty()) {
             throw new RuntimeException("模板描述不能为空");
         }
-        String originalName = zipFile.getOriginalFilename();
-        if (originalName == null || !originalName.toLowerCase(Locale.ROOT).endsWith(".zip")) {
-            throw new RuntimeException("请上传 .zip 格式文件");
-        }
+        ZipLatexBundleUtil.requireZipExtension(zipFile);
 
         Path templateDir = Paths.get("./static/templates").toAbsolutePath().normalize();
         int importedCount = 0;
-        int texFileIndex = 0;
 
         try {
-            Files.createDirectories(templateDir);
-            String bundleId = "bundle_" + UUID.randomUUID().toString().replace("-", "");
-            Path bundleDir = templateDir.resolve(bundleId);
-            Files.createDirectories(bundleDir);
-
-            List<Path> texFiles = new ArrayList<>();
-            try (InputStream rawInput = zipFile.getInputStream();
-                 ZipInputStream zis = new ZipInputStream(rawInput, StandardCharsets.UTF_8)) {
-                ZipEntry entry;
-                while ((entry = zis.getNextEntry()) != null) {
-                    String entryName = entry.getName();
-                    if (entryName == null || entryName.isBlank()) {
-                        zis.closeEntry();
-                        continue;
-                    }
-
-                    Path normalizedEntryPath = Paths.get(entryName).normalize();
-                    if (normalizedEntryPath.isAbsolute() || normalizedEntryPath.startsWith("..")) {
-                        zis.closeEntry();
-                        continue;
-                    }
-
-                    Path target = bundleDir.resolve(normalizedEntryPath).normalize();
-                    if (!target.startsWith(bundleDir)) {
-                        zis.closeEntry();
-                        continue;
-                    }
-
-                    if (entry.isDirectory()) {
-                        Files.createDirectories(target);
-                        zis.closeEntry();
-                        continue;
-                    }
-
-                    Path parent = target.getParent();
-                    if (parent != null) {
-                        Files.createDirectories(parent);
-                    }
-                    Files.copy(zis, target, StandardCopyOption.REPLACE_EXISTING);
-                    if (entryName.toLowerCase(Locale.ROOT).endsWith(".tex")) {
-                        texFiles.add(target);
-                    }
-                    zis.closeEntry();
-                }
+            ZipLatexBundleUtil.BundleResult bundleResult = ZipLatexBundleUtil.extractZipBundle(zipFile, templateDir);
+            List<Path> texFiles = bundleResult.texFiles();
+            Path primaryTex = resolvePrimaryTexPath(texFiles, bundleResult.bundleDir());
+            if (primaryTex == null) {
+                throw new RuntimeException("zip 中未找到可导入的 .tex 模板文件");
             }
+            Path primaryAbs = primaryTex.toAbsolutePath().normalize();
+            if (!Files.exists(primaryAbs) || !Files.isRegularFile(primaryAbs) || Files.size(primaryAbs) == 0L) {
+                throw new RuntimeException("主 .tex 文件无效或为空");
+            }
+            // 仅保存主文件绝对路径（template_path 列为 VARCHAR 时常较短）；正文始终在磁盘 bundle 中，由 normalizeTemplate 读取
+            TemplateDTO dto = new TemplateDTO();
+            dto.setName(normalizedName);
+            dto.setDescription(normalizedDescription);
+            dto.setContent(primaryAbs.toString());
+            dto.setPreviewImage("");
+            dto.setCategory("general");
+            dto.setIsSystem(false);
+            dto.setUsageCount(0);
+            LocalDateTime now = LocalDateTime.now();
+            dto.setCreatedAt(now);
+            dto.setUpdatedAt(now);
 
-            for (Path texPath : texFiles) {
-                String latexContent = Files.readString(texPath, StandardCharsets.UTF_8);
-                if (latexContent == null || latexContent.isBlank()) {
-                    continue;
-                }
-
-                texFileIndex += 1;
-                String finalName = texFileIndex == 1
-                        ? normalizedName
-                        : sanitizeTemplateName(normalizedName + "-" + texFileIndex);
-
-                TemplateDTO dto = new TemplateDTO();
-                dto.setName(finalName);
-                dto.setDescription(normalizedDescription);
-                dto.setContent(texPath.toString());
-                dto.setPreviewImage("");
-                dto.setCategory("general");
-                dto.setIsSystem(false);
-                dto.setUsageCount(0);
-                LocalDateTime now = LocalDateTime.now();
-                dto.setCreatedAt(now);
-                dto.setUpdatedAt(now);
-
-                int result = templateMapper.insert(dto);
-                if (result > 0) {
-                    importedCount += 1;
-                }
+            int result = templateMapper.insert(dto);
+            if (result > 0) {
+                importedCount = 1;
             }
         } catch (Exception e) {
             throw new RuntimeException("导入模板失败: " + e.getMessage(), e);

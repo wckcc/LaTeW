@@ -69,6 +69,60 @@
           <label>邮箱</label>
           <span class="info-value">{{ userInfo.email || '未绑定' }}</span>
         </div>
+        <div class="info-item password-row">
+          <label>密码</label>
+          <div class="password-edit-wrap">
+            <template v-if="editingPassword">
+              <div class="password-fields">
+                <input
+                  v-model="passwordForm.oldPassword"
+                  class="password-input"
+                  type="password"
+                  autocomplete="current-password"
+                  placeholder="当前密码"
+                />
+                <input
+                  v-model="passwordForm.newPassword"
+                  class="password-input"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="新密码（至少6位）"
+                />
+                <input
+                  v-model="passwordForm.confirmPassword"
+                  class="password-input"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="确认新密码"
+                />
+                <div class="password-actions">
+                  <button
+                    class="mini-btn save"
+                    type="button"
+                    :disabled="passwordSubmitting"
+                    @click="handleSavePassword"
+                  >
+                    {{ passwordSubmitting ? '提交中...' : '保存' }}
+                  </button>
+                  <button
+                    class="mini-btn cancel"
+                    type="button"
+                    :disabled="passwordSubmitting"
+                    @click="cancelEditPassword"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            </template>
+            <template v-else>
+              <div class="password-inline">
+                <span class="info-value muted">••••••••</span>
+                <button class="mini-btn edit" type="button" @click="startEditPassword">修改密码</button>
+              </div>
+            </template>
+          </div>
+        </div>
       </div>
 
       <!-- 操作按钮 -->
@@ -93,7 +147,7 @@
 </template>
 
 <script>
-import { uploadAvatar, getUserById, updateUsername } from '../api/user'
+import { uploadAvatar, getUserById, updateUsername, changePassword } from '../api/user'
 import { getUser, setUser, clearAuth } from '../utils/auth'
 
 export default {
@@ -108,6 +162,13 @@ export default {
       },
       editingUsername: false,
       usernameInput: '',
+      editingPassword: false,
+      passwordSubmitting: false,
+      passwordForm: {
+        oldPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      },
       uploading: false,
       message: {
         show: false,
@@ -166,6 +227,54 @@ export default {
     cancelEditUsername() {
       this.editingUsername = false
       this.usernameInput = this.userInfo.username || ''
+    },
+
+    startEditPassword() {
+      this.passwordForm = { oldPassword: '', newPassword: '', confirmPassword: '' }
+      this.editingPassword = true
+    },
+
+    cancelEditPassword() {
+      if (this.passwordSubmitting) return
+      this.editingPassword = false
+      this.passwordForm = { oldPassword: '', newPassword: '', confirmPassword: '' }
+    },
+
+    async handleSavePassword() {
+      const oldPwd = (this.passwordForm.oldPassword || '').trim()
+      const newPwd = (this.passwordForm.newPassword || '').trim()
+      const confirm = (this.passwordForm.confirmPassword || '').trim()
+      if (!oldPwd) {
+        this.showMessage('请输入当前密码', 'error')
+        return
+      }
+      if (!newPwd) {
+        this.showMessage('请输入新密码', 'error')
+        return
+      }
+      if (newPwd.length < 6) {
+        this.showMessage('新密码长度不能少于6位', 'error')
+        return
+      }
+      if (newPwd !== confirm) {
+        this.showMessage('两次输入的新密码不一致', 'error')
+        return
+      }
+      if (newPwd === oldPwd) {
+        this.showMessage('新密码不能与当前密码相同', 'error')
+        return
+      }
+      this.passwordSubmitting = true
+      try {
+        await changePassword(this.userInfo.id, oldPwd, newPwd)
+        this.showMessage('密码修改成功', 'success')
+        this.editingPassword = false
+        this.passwordForm = { oldPassword: '', newPassword: '', confirmPassword: '' }
+      } catch (error) {
+        this.showMessage(error.message || '密码修改失败', 'error')
+      } finally {
+        this.passwordSubmitting = false
+      }
     },
 
     async handleSaveUsername() {
@@ -409,6 +518,61 @@ export default {
 
 .info-item:last-child {
   border-bottom: none;
+}
+
+.password-row {
+  align-items: flex-start;
+}
+
+.password-edit-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: 1;
+  min-width: 0;
+}
+
+.password-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.password-fields {
+  width: 100%;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.password-input {
+  width: 100%;
+  height: 36px;
+  border: 1px solid rgba(125, 151, 194, 0.28);
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.76);
+  box-sizing: border-box;
+}
+
+.password-input:focus {
+  outline: none;
+  border-color: rgba(15, 108, 189, 0.5);
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.14);
+}
+
+.password-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.info-value.muted {
+  color: var(--fluent-text-3);
+  font-weight: 500;
 }
 
 .info-item label {

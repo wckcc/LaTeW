@@ -39,6 +39,17 @@
           <h3>导入PDF</h3>
           <p>上传PDF文件并转换为LaTeX文档</p>
         </div>
+        
+        <!-- 导入项目（zip） -->
+        <div 
+          class="option-card" 
+          :class="{ active: selectedOption === 'importZip' }"
+          @click="selectOption('importZip')"
+        >
+          <div class="option-icon">📦</div>
+          <h3>导入项目</h3>
+          <p>上传 LaTeX 项目 zip 包（含 .tex 及依赖文件）</p>
+        </div>
       </div>
       
       <!-- 模板选择区域 -->
@@ -132,6 +143,44 @@
         </div>
       </div>
       
+      <!-- zip 导入项目区域 -->
+      <div v-if="selectedOption === 'importZip'" class="import-section">
+        <div class="upload-area" 
+             :class="{ 'drag-over': isZipDragOver }"
+             @drop.prevent="handleZipDrop"
+             @dragover.prevent="isZipDragOver = true"
+             @dragleave.prevent="isZipDragOver = false"
+        >
+          <input 
+            ref="zipFileInput"
+            type="file" 
+            accept=".zip,application/zip,application/x-zip-compressed"
+            @change="handleZipFileSelect"
+            style="display: none"
+          />
+          <div class="upload-content">
+            <div class="upload-icon">📦</div>
+            <p class="upload-text">点击或拖拽 zip 文件到这里</p>
+            <p class="upload-hint">需为 .zip 格式，包内至少包含一个 .tex 文件（与系统「导入模板」解压方式一致）</p>
+            <button class="upload-btn" @click="$refs.zipFileInput.click()">
+              选择文件
+            </button>
+          </div>
+        </div>
+        
+        <div v-if="selectedZipFile" class="file-info">
+          <div class="file-name">
+            <span>📦</span>
+            <span>{{ selectedZipFile.name }}</span>
+            <span class="file-size">({{ formatFileSize(selectedZipFile.size) }})</span>
+            <button class="remove-file" @click="removeZipFile">×</button>
+          </div>
+          <div class="file-hint">
+            <p>主入口优先使用包内的 main.tex，其次 document.tex，否则使用 zip 中遇到的第一个 .tex。</p>
+          </div>
+        </div>
+      </div>
+      
       <!-- 项目名称输入 -->
       <div v-if="selectedOption !== null" class="project-name-section">
         <label for="project-name">项目名称</label>
@@ -152,7 +201,7 @@
           :disabled="!canCreate"
           @click="handleCreate"
         >
-          {{ creating ? (selectedOption === 'import' ? 'AI识别中...' : '创建中...') : '创建' }}
+          {{ creating ? (selectedOption === 'import' ? 'AI识别中...' : selectedOption === 'importZip' ? '导入中...' : '创建中...') : '创建' }}
         </button>
       </div>
     </div>
@@ -160,7 +209,7 @@
 </template>
 
 <script>
-import { createProject, createProjectFromPdf } from '../api/project'
+import { createProject, createProjectFromPdf, importProjectFromZip } from '../api/project'
 import { getAllTemplates } from '../api/template'
 import { getUser } from '../utils/auth'
 
@@ -168,14 +217,16 @@ export default {
   name: 'NewProject',
   data() {
     return {
-      selectedOption: null, // 'blank', 'template', 'import'
+      selectedOption: null, // 'blank', 'template', 'import', 'importZip'
       selectedTemplate: null,
       selectedCategory: 'all',
       templates: [],
       loadingTemplates: false,
       projectName: '',
       selectedFile: null,
+      selectedZipFile: null,
       isDragOver: false,
+      isZipDragOver: false,
       creating: false,
       categories: [{ value: 'all', label: '全部' }]
     }
@@ -199,6 +250,10 @@ export default {
         return false
       }
       
+      if (this.selectedOption === 'importZip' && !this.selectedZipFile) {
+        return false
+      }
+      
       return true
     }
   },
@@ -219,6 +274,7 @@ export default {
       this.selectedOption = option
       this.selectedTemplate = null
       this.selectedFile = null
+      this.selectedZipFile = null
       this.projectName = ''
     },
     selectCategory(category) {
@@ -277,6 +333,43 @@ export default {
         this.$refs.fileInput.value = ''
       }
     },
+    isZipFile(file) {
+      if (!file || !file.name) return false
+      return /\.zip$/i.test(file.name)
+    },
+    handleZipFileSelect(event) {
+      const file = event.target.files[0]
+      if (file) {
+        if (!this.isZipFile(file)) {
+          alert('请上传 .zip 格式文件')
+          return
+        }
+        this.selectedZipFile = file
+        if (!this.projectName) {
+          this.projectName = file.name.replace(/\.zip$/i, '')
+        }
+      }
+    },
+    handleZipDrop(event) {
+      this.isZipDragOver = false
+      const file = event.dataTransfer.files[0]
+      if (file) {
+        if (!this.isZipFile(file)) {
+          alert('请上传 .zip 格式文件')
+          return
+        }
+        this.selectedZipFile = file
+        if (!this.projectName) {
+          this.projectName = file.name.replace(/\.zip$/i, '')
+        }
+      }
+    },
+    removeZipFile() {
+      this.selectedZipFile = null
+      if (this.$refs.zipFileInput) {
+        this.$refs.zipFileInput.value = ''
+      }
+    },
     getCategoryLabel(category) {
       const cat = this.categories.find(c => c.value === category)
       return cat ? cat.label : category
@@ -308,13 +401,18 @@ export default {
           // 创建空白项目
           projectContent = '\\documentclass{article}\n\\begin{document}\n\n\\end{document}'
         } else if (this.selectedOption === 'template') {
-          // 使用模板创建项目
+          // 使用模板创建项目（需带 %TEMPLATE_SOURCE_PATH= 才能复制 zip 中的图片/ cls 等依赖）
           const fallback = '\\documentclass{article}\n\\begin{document}\n\n\\end{document}'
           const templateContent = this.selectedTemplate.content || fallback
-          const sourcePath = (this.selectedTemplate.sourcePath || '').trim()
-          projectContent = sourcePath
-            ? `%TEMPLATE_SOURCE_PATH=${sourcePath}\n${templateContent}`
-            : templateContent
+          const raw = (templateContent || '').replace(/\r\n/g, '\n')
+          if (raw.trim().startsWith('%TEMPLATE_SOURCE_PATH=')) {
+            projectContent = templateContent
+          } else {
+            const sourcePath = (this.selectedTemplate.sourcePath || '').trim()
+            projectContent = sourcePath
+              ? `%TEMPLATE_SOURCE_PATH=${sourcePath}\n${templateContent}`
+              : templateContent
+          }
         } else if (this.selectedOption === 'import') {
           // 导入PDF文件，使用AI识别并转换为LaTeX
           if (!this.selectedFile) {
@@ -337,6 +435,31 @@ export default {
           } catch (error) {
             console.error('从PDF创建项目失败:', error)
             alert('从PDF创建项目失败: ' + (error.message || '未知错误'))
+          } finally {
+            this.creating = false
+          }
+          return
+        } else if (this.selectedOption === 'importZip') {
+          if (!this.selectedZipFile) {
+            alert('请先选择 zip 文件')
+            this.creating = false
+            return
+          }
+          if (!this.isZipFile(this.selectedZipFile)) {
+            alert('请上传 .zip 格式文件')
+            this.creating = false
+            return
+          }
+          try {
+            const response = await importProjectFromZip(this.selectedZipFile, this.projectName)
+            if (response.data && response.data.id) {
+              this.$router.push('/projects')
+            } else {
+              alert('导入项目失败：未返回项目ID')
+            }
+          } catch (error) {
+            console.error('导入项目失败:', error)
+            alert('导入项目失败: ' + (error.message || '未知错误'))
           } finally {
             this.creating = false
           }
@@ -431,7 +554,7 @@ export default {
 
 .options-container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 20px;
   margin-bottom: 30px;
 }

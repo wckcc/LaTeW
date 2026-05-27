@@ -5,7 +5,9 @@ import org.example.dto.CompileRequest;
 import org.example.dto.CompileResult;
 import org.example.dto.PdfToLatexResponse;
 import org.example.dto.ProjectDTO;
+import org.example.dto.ProjectWorkspaceInfoDTO;
 import org.example.dto.ResponseResult;
+import org.example.dto.WorkspaceFilePayloadDTO;
 import org.example.service.AIService;
 import org.example.service.ProjectService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +75,30 @@ public class ProjectController {
     }
 
     /**
+     * 从 zip 包导入项目（与模板 zip 解压逻辑一致，需包含至少一个 .tex 文件）
+     * POST /api/projects/import-zip
+     */
+    @PostMapping("/import-zip")
+    public ResponseResult<ProjectDTO> importProjectFromZip(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("name") String projectName,
+            HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        if (projectName == null || projectName.trim().isEmpty()) {
+            return ResponseResult.error(400, "项目名称不能为空");
+        }
+        try {
+            ProjectDTO created = projectService.importProjectFromZip(file, projectName.trim(), userId);
+            return ResponseResult.success("项目导入成功", created);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(500, e.getMessage());
+        }
+    }
+
+    /**
      * 根据用户ID查询项目列表
      * GET /api/projects/user/{userId}
      */
@@ -117,6 +143,85 @@ public class ProjectController {
         
         return ResponseResult.success("查询成功", project);
     }
+
+    /**
+     * 多文件工作区：可编辑文件列表（bundle 解压目录）
+     * GET /api/projects/{id}/workspace
+     */
+    @GetMapping("/{id}/workspace")
+    public ResponseResult<ProjectWorkspaceInfoDTO> getProjectWorkspace(
+            @PathVariable Long id,
+            HttpServletRequest request) {
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseResult.error(404, "项目不存在");
+        }
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseResult.error(403, "没有权限访问该项目");
+        }
+        ProjectWorkspaceInfoDTO info = projectService.getProjectWorkspaceInfo(id);
+        return ResponseResult.success("查询成功", info);
+    }
+
+    /**
+     * 读取工作区内单个文件内容
+     * GET /api/projects/{id}/workspace/file?path=相对路径
+     */
+    @GetMapping("/{id}/workspace/file")
+    public ResponseResult<WorkspaceFilePayloadDTO> readProjectWorkspaceFile(
+            @PathVariable Long id,
+            @RequestParam("path") String path,
+            HttpServletRequest request) {
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseResult.error(404, "项目不存在");
+        }
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseResult.error(403, "没有权限访问该项目");
+        }
+        try {
+            WorkspaceFilePayloadDTO payload = projectService.readProjectWorkspaceFile(id, path);
+            return ResponseResult.success("查询成功", payload);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(400, e.getMessage());
+        }
+    }
+
+    /**
+     * 保存工作区内非主入口文件
+     * PUT /api/projects/{id}/workspace/file
+     */
+    @PutMapping("/{id}/workspace/file")
+    public ResponseResult<Void> writeProjectWorkspaceFile(
+            @PathVariable Long id,
+            @RequestBody WorkspaceFilePayloadDTO body,
+            HttpServletRequest request) {
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseResult.error(401, "用户未登录");
+        }
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseResult.error(404, "项目不存在");
+        }
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseResult.error(403, "没有权限修改该项目");
+        }
+        try {
+            projectService.writeProjectWorkspaceFile(id, body);
+            return ResponseResult.success("保存成功", null);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(400, e.getMessage());
+        }
+    }
     
     /**
      * 更新项目内容
@@ -129,23 +234,19 @@ public class ProjectController {
         if (currentUserId == null) {
             return ResponseResult.error(401, "用户未登录");
         }
-        
         // 检查项目ID是否存在
         if (projectDTO.getId() == null) {
             return ResponseResult.error(400, "项目ID不能为空");
         }
-        
         // 检查项目是否存在
         ProjectDTO existingProject = projectService.getProjectById(projectDTO.getId());
         if (existingProject == null) {
             return ResponseResult.error(404, "项目不存在");
         }
-        
         // 检查用户权限，确保用户只能更新自己创建的项目
         if (!existingProject.getUserId().equals(currentUserId)) {
             return ResponseResult.error(403, "没有权限更新该项目");
         }
-        
         // 更新项目内容
         projectDTO.setUserId(currentUserId); // 确保使用当前用户ID
         ProjectDTO updatedProject = projectService.updateProjectById(projectDTO);
@@ -411,6 +512,43 @@ public class ProjectController {
                     .body(bytes);
         } catch (Exception e) {
             return ResponseEntity.status(500).body("导出 LaTeX 失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 导出项目为 zip（bundle 项目为目录全量；单文件项目为内含 main.tex 的 zip）
+     * GET /api/projects/{id}/export-zip
+     */
+    @GetMapping("/{id}/export-zip")
+    public ResponseEntity<?> exportProjectZip(@PathVariable Long id, HttpServletRequest request) {
+        Long currentUserId = (Long) request.getAttribute("userId");
+        if (currentUserId == null) {
+            return ResponseEntity.status(401).body("用户未登录");
+        }
+
+        ProjectDTO project = projectService.getProjectById(id);
+        if (project == null) {
+            return ResponseEntity.status(404).body("项目不存在");
+        }
+        if (!project.getUserId().equals(currentUserId)) {
+            return ResponseEntity.status(403).body("没有权限导出该项目");
+        }
+
+        try {
+            String baseName = project.getName() == null || project.getName().trim().isEmpty()
+                    ? "project_" + id
+                    : project.getName().trim();
+            String fileName = baseName + ".zip";
+            String encodedFileName = URLEncoder.encode(fileName, "UTF-8").replaceAll("\\+", "%20");
+
+            byte[] zipBytes = projectService.exportProjectZipArchive(id);
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
+                    .contentType(MediaType.parseMediaType("application/zip"))
+                    .body(zipBytes);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("导出 zip 失败: " + e.getMessage());
         }
     }
 

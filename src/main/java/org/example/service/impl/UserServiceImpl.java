@@ -146,24 +146,19 @@ public class UserServiceImpl implements UserService {
         if (loginDTO.getPassword() == null || loginDTO.getPassword().isBlank()) {
             throw new RuntimeException("密码不能为空");
         }
-
         String email = loginDTO.getEmail().trim();
         String password = loginDTO.getPassword().trim();
-
         // 根据邮箱查询用户
         UserDTO user = userMapper.selectByEmail(email);
         if (user == null) {
             throw new RuntimeException("请先注册");
         }
-
         // 验证密码
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new RuntimeException("密码错误");
         }
-
         // 生成JWT令牌
         String token = jwtUtil.generateToken(user.getUsername(), user.getId());
-
         // 构建并返回登录响应
         return new UserLoginVO(token, user.getId(), user.getUsername(), user.getRole());
     }
@@ -315,6 +310,46 @@ public class UserServiceImpl implements UserService {
             throw new RuntimeException("用户不存在");
         }
         return user;
+    }
+
+    /**
+     * 修改密码
+     */
+    @Override
+    public void changePassword(Long userId, String oldPassword, String newPassword) {
+        if (userId == null) {
+            throw new RuntimeException("用户ID不能为空");
+        }
+        if (oldPassword == null || oldPassword.isBlank()) {
+            throw new RuntimeException("请输入当前密码");
+        }
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new RuntimeException("请输入新密码");
+        }
+        String trimmedNew = newPassword.trim();
+        if (trimmedNew.length() < 6) {
+            throw new RuntimeException("新密码长度不能少于6位");
+        }
+        if (trimmedNew.length() > 128) {
+            throw new RuntimeException("新密码长度不能超过128位");
+        }
+        if (trimmedNew.equals(oldPassword)) {
+            throw new RuntimeException("新密码不能与当前密码相同");
+        }
+
+        UserDTO user = userMapper.selectByIdWithPassword(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (user.getPassword() == null || !passwordEncoder.matches(oldPassword.trim(), user.getPassword())) {
+            throw new RuntimeException("当前密码错误");
+        }
+
+        String encoded = passwordEncoder.encode(trimmedNew);
+        int updated = userMapper.updatePasswordHash(userId, encoded);
+        if (updated <= 0) {
+            throw new RuntimeException("修改密码失败");
+        }
     }
 }
 

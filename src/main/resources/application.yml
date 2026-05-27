@@ -76,7 +76,9 @@ latex:
     pdflatex-path: pdflatex   # pdflatex命令路径（如果不在PATH中，请指定完整路径，如：C:/texlive/2024/bin/windows/pdflatex.exe）
     xelatex-path: xelatex     # xelatex命令路径（可改为完整路径）
     lualatex-path: lualatex   # lualatex命令路径（可改为完整路径）
-    timeout: 30               # 编译超时时间（秒）
+    latexmk-path: latexmk     # 若可用则优先用 latexmk 一次完成多轮编译与 biber/bibtex
+    timeout: 300              # 编译超时时间（秒），5 分钟
+    max-pdf-versions-per-project: 3  # 同一项目最多保留的 PDF 版本数（更早的删库并删物理文件）
 
 # Word 导出配置（Pandoc）
 word:
@@ -85,6 +87,14 @@ word:
     output-dir: ./static/word # Word 输出目录
     pandoc-path: pandoc       # pandoc 命令路径（若不在 PATH 中请配置绝对路径）
     timeout: 60               # 导出超时时间（秒）
+
+# project_bundles 孤儿目录：启动时自动删除（默认 false；清理历史垃圾时可临时改为 true）
+# 命令行维护（同次运行会清理 project_bundles 孤儿目录 + static/pdf 中未在 pdf_word_file 登记的 PDF）：
+# mvn spring-boot:run -Dspring-boot.run.profiles=cleanup-bundles
+latew:
+  cleanup-orphan-bundles-on-startup: false
+  cleanup-bundles:
+    dry-run: true
 
 # 火山引擎 API配置（豆包大模型）
 volcengine:

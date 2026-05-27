@@ -59,5 +59,17 @@ public interface UserMapper {
      */
     @Select("select user_id as id, username, email, avatar_url as avatar, role from user where user_id = #{id}")
     UserDTO selectById(Long id);
+
+    /**
+     * 根据ID查询用户（含密码哈希，仅服务层校验用）
+     */
+    @Select("select user_id as id, username, email, password_hash as password, avatar_url as avatar, role from user where user_id = #{id}")
+    UserDTO selectByIdWithPassword(Long id);
+
+    /**
+     * 更新密码
+     */
+    @Update("update user set password_hash = #{passwordHash} where user_id = #{userId}")
+    int updatePasswordHash(@Param("userId") Long userId, @Param("passwordHash") String passwordHash);
 }
 

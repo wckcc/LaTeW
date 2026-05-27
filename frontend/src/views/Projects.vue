@@ -138,17 +138,27 @@
                 {{ formatDate(project.updatedAt || project.createdAt) }}
               </td>
               <td class="actions-cell">
+                <button
+                  class="action-btn rename-btn"
+                  type="button"
+                  title="重命名"
+                  @click.stop="renameProject(project)"
+                >
+                  ✏️
+                </button>
                 <button 
                   class="action-btn" 
+                  type="button"
                   title="下载"
-                  @click="downloadProject(project.id)"
+                  @click.stop="downloadProject(project.id)"
                 >
                   ⬇️
                 </button>
                 <button 
                   class="action-btn delete-btn" 
+                  type="button"
                   title="删除"
-                  @click="deleteProject(project.id)"
+                  @click.stop="deleteProject(project.id)"
                 >
                   🗑️
                 </button>
@@ -166,7 +176,7 @@
 </template>
 
 <script>
-import { getAllProjects, getProjectsByUser, deleteProject as deleteProjectAPI, compileProject } from '../api/project'
+import { getAllProjects, getProjectsByUser, deleteProject as deleteProjectAPI, compileProject, updateProject } from '../api/project'
 import { getUserById } from '../api/user'
 import { importTemplatesZip } from '../api/template'
 import { getUser, setUser } from '../utils/auth'
@@ -283,6 +293,27 @@ export default {
     openProject(id) {
       // 跳转到编辑器页面
       this.$router.push(`/editor/${id}`)
+    },
+    async renameProject(project) {
+      const current = (project.name || '').trim() || '未命名项目'
+      const raw = window.prompt('请输入新的项目名称', current)
+      if (raw === null) return
+      const name = (raw || '').trim()
+      if (!name) {
+        alert('项目名称不能为空')
+        return
+      }
+      if (name === (project.name || '').trim()) return
+      try {
+        await updateProject(project.id, { name })
+        const idx = this.projects.findIndex((p) => p.id === project.id)
+        if (idx !== -1) {
+          this.projects[idx] = { ...this.projects[idx], name }
+        }
+      } catch (error) {
+        console.error('重命名失败:', error)
+        alert('重命名失败: ' + (error.message || '未知错误'))
+      }
     },
     downloadProject(id) {
       // 默认下载 PDF：先编译，再下载
@@ -720,6 +751,10 @@ export default {
   border-color: rgba(15, 108, 189, 0.22);
   color: var(--fluent-accent);
   transform: translateY(-1px);
+}
+
+.rename-btn {
+  color: #1a6cad;
 }
 
 .delete-btn {

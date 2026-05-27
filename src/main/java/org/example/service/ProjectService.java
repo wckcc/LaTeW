@@ -2,6 +2,9 @@ package org.example.service;
 
 import org.example.dto.CompileResult;
 import org.example.dto.ProjectDTO;
+import org.example.dto.ProjectWorkspaceInfoDTO;
+import org.example.dto.WorkspaceFilePayloadDTO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -53,9 +56,25 @@ public interface ProjectService {
     String exportProjectToWord(Long projectId);
 
     /**
+     * 将项目打成 zip 字节数组（多文件项目为解压目录全量；单文件为仅含 main.tex）。
+     */
+    byte[] exportProjectZipArchive(Long projectId);
+
+    /**
      * 删除项目
      * @param projectId 项目ID
      */
     void deleteProjectById(Long projectId);
+
+    /**
+     * 从 zip 包创建项目（解压方式与模板 zip 导入一致，主入口优先 main.tex / document.tex）
+     */
+    ProjectDTO importProjectFromZip(MultipartFile zipFile, String projectName, Long userId);
+
+    ProjectWorkspaceInfoDTO getProjectWorkspaceInfo(Long projectId);
+
+    WorkspaceFilePayloadDTO readProjectWorkspaceFile(Long projectId, String relativePath);
+
+    void writeProjectWorkspaceFile(Long projectId, WorkspaceFilePayloadDTO payload);
 }
 

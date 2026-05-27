@@ -1,5 +1,7 @@
 package org.example.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.example.dto.ChangePasswordDTO;
 import org.example.dto.EmailSendCodeDTO;
 import org.example.dto.ResponseResult;
 import org.example.dto.UserDTO;
@@ -110,6 +112,30 @@ public class UserController {
             return ResponseResult.success(user);
         } catch (RuntimeException e) {
             return ResponseResult.error(404, e.getMessage());
+        }
+    }
+
+    /**
+     * 修改密码
+     * PUT /api/users/{userId}/password
+     */
+    @PutMapping("/{userId}/password")
+    public ResponseResult<Void> changePassword(
+            @PathVariable Long userId,
+            @RequestBody ChangePasswordDTO dto,
+            HttpServletRequest request) {
+        try {
+            Object attr = request.getAttribute("userId");
+            if (!(attr instanceof Long tokenUserId) || !tokenUserId.equals(userId)) {
+                return ResponseResult.error(403, "无权修改该账号密码");
+            }
+            if (dto == null) {
+                return ResponseResult.error(400, "请求体不能为空");
+            }
+            userService.changePassword(userId, dto.getOldPassword(), dto.getNewPassword());
+            return ResponseResult.success("密码修改成功", null);
+        } catch (RuntimeException e) {
+            return ResponseResult.error(400, e.getMessage());
         }
     }
 

@@ -88,7 +88,9 @@ export function compileProject(id, compiler = 'pdflatex') {
   return request({
     url: `/projects/${id}/compile`,
     method: 'post',
-    data: { compiler }
+    data: { compiler },
+    // 后端每个子进程最长 5 分钟（latex.compile.timeout）；一次请求可能含多轮 pdflatex/bibtex，总耗可能更长
+    timeout: 1200000
   })
 }
 
@@ -108,6 +110,56 @@ export function createProjectFromPdf(file, projectName) {
     method: 'post',
     data: formData,
     timeout: 120000 // 文件上传和AI处理可能需要更长时间，设置为120秒
+  })
+}
+
+/**
+ * 从 zip 包导入项目（与后端模板 zip 解压规则一致）
+ * @param {File} file - zip 文件
+ * @param {String} projectName - 项目名称
+ * @returns {Promise}
+ */
+export function importProjectFromZip(file, projectName) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('name', projectName || '')
+  return request({
+    url: '/projects/import-zip',
+    method: 'post',
+    data: formData,
+    timeout: 120000
+  })
+}
+
+/**
+ * 多文件工作区：文件列表（bundle 项目）
+ */
+export function getProjectWorkspaceInfo(projectId) {
+  return request({
+    url: `/projects/${projectId}/workspace`,
+    method: 'get'
+  })
+}
+
+/**
+ * 读取工作区内文件
+ */
+export function getProjectWorkspaceFile(projectId, relativePath) {
+  return request({
+    url: `/projects/${projectId}/workspace/file`,
+    method: 'get',
+    params: { path: relativePath }
+  })
+}
+
+/**
+ * 保存工作区内非主入口文件
+ */
+export function updateProjectWorkspaceFile(projectId, relativePath, content) {
+  return request({
+    url: `/projects/${projectId}/workspace/file`,
+    method: 'put',
+    data: { path: relativePath, content: content ?? '' }
   })
 }
 
@@ -165,14 +217,14 @@ export function exportProjectWord(id) {
 }
 
 /**
- * 导出项目为LaTeX源文件（tex）
+ * 导出项目为 zip（多文件项目为完整目录；单文件项目为内含 main.tex 的压缩包）
  * @param {Number} id - 项目ID
- * @returns {Promise<Blob>}
+ * @returns {Promise}
  */
-export function exportProjectLatex(id) {
+export function exportProjectZip(id) {
   const token = getToken()
   return axios({
-    url: `/api/projects/${id}/export-latex`,
+    url: `/api/projects/${id}/export-zip`,
     method: 'get',
     responseType: 'blob',
     headers: token ? { token } : {}

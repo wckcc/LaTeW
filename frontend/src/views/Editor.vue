@@ -5,14 +5,26 @@
       <div class="header-left">
         <button class="back-btn" @click="goBack">&larr; 返回项目列表</button>
         <h1 class="project-title">{{ projectName || '未命名项目' }}</h1>
-        <button class="import-latex-btn" @click="triggerImportLatex">导入LaTeX</button>
+      </div>
+      <div v-if="showWorkspaceFileSelect" class="header-workspace">
+        <label class="workspace-select-label" for="workspace-file-select">项目文件</label>
+        <select
+          id="workspace-file-select"
+          class="workspace-file-select"
+          :value="activeWorkspaceFile"
+          @change="onWorkspaceFileSelect"
+        >
+          <option v-for="rel in workspaceFiles" :key="rel" :value="rel">{{ rel }}</option>
+        </select>
       </div>
       <div class="header-center">
         <button class="ai-assistant-btn" @click="openAiDialog">AI助手</button>
       </div>
       <div class="header-right">
         <button class="save-btn" @click="saveProject">保存</button>
-        <button class="compile-btn" @click="compileLatex">编译</button>
+        <button class="compile-btn" type="button" :disabled="isCompiling" @click="compileLatex">
+          {{ isCompiling ? '编译中...' : '编译' }}
+        </button>
         <select v-model="selectedCompiler" class="compiler-select" title="选择LaTeX编译引擎">
           <option
             v-for="item in compilerOptions"
@@ -25,13 +37,6 @@
         <button class="download-btn" @click="downloadPdf">下载PDF</button>
         <button class="download-word-btn" @click="downloadWord">下载Word</button>
         <button class="download-latex-btn" @click="downloadLatex">下载LaTeX</button>
-        <input
-          ref="latexFileInputRef"
-          type="file"
-          accept=".tex,text/plain"
-          class="latex-file-input"
-          @change="handleLatexImport"
-        />
         <input
           ref="imageFileInputRef"
           type="file"
@@ -130,13 +135,25 @@
       <!-- 右侧PDF预览区 -->
       <section class="editor-right">
         <div class="editor-section-header">
-          <h2>PDF预览</h2>
-          <span class="preview-status">{{ previewStatus }}</span>
+          <h2>{{ showCompileLogPanel ? '编译日志' : 'PDF预览' }}</h2>
+          <div class="preview-header-right">
+            <span class="preview-status">{{ previewStatus }}</span>
+            <button
+              type="button"
+              class="preview-log-btn"
+              @click="toggleCompileLogPanel"
+            >
+              {{ showCompileLogPanel ? '查看 PDF' : '查看日志' }}
+            </button>
+          </div>
         </div>
         <div class="pdf-preview-container">
           <div v-if="loading" class="pdf-loading">
             <div class="loading-spinner"></div>
             <p>正在加载PDF...</p>
+          </div>
+          <div v-else-if="showCompileLogPanel" class="compile-log-panel">
+            <pre>{{ lastCompileLog || '暂无编译日志，请先编译。' }}</pre>
           </div>
           <div v-else-if="hasCompileErrorReport" class="compile-error-panel">
             <h3>编译错误报告</h3>
@@ -163,7 +180,9 @@
           </div>
           <div v-else class="pdf-placeholder">
             <p>编译LaTeX代码后将在此显示PDF预览</p>
-            <button class="compile-now-btn" @click="compileLatex">立即编译</button>
+            <button class="compile-now-btn" type="button" :disabled="isCompiling" @click="compileLatex">
+              {{ isCompiling ? '编译中...' : '立即编译' }}
+            </button>
           </div>
         </div>
       </section>
@@ -196,12 +215,6 @@
       </div>
     </div>
     
-    <!-- 底部状态栏 -->
-    <footer class="editor-footer">
-      <div class="status-right">
-        <span class="last-saved">最后保存: {{ lastSavedTime }}</span>
-      </div>
-    </footer>
   </div>
 </template>
 
@@ -209,7 +222,18 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ComponentType, componentConfig } from '../utils/componentTypes'
-import { getProjectById, updateProject, compileProject, exportProjectWord, exportProjectLatex, uploadProjectImage, uploadProjectImageByUrl } from '../api/project'
+import {
+  getProjectById,
+  updateProject,
+  compileProject,
+  exportProjectWord,
+  exportProjectZip,
+  uploadProjectImage,
+  uploadProjectImageByUrl,
+  getProjectWorkspaceInfo,
+  getProjectWorkspaceFile,
+  updateProjectWorkspaceFile
+} from '../api/project'
 import { processWithAI } from '../api/ai'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from '@codemirror/view'
@@ -301,11 +325,99 @@ export default {
     const projectId = ref(route.params.id)
     const projectName = ref('')
 
+    const WORKSPACE_PREFIX = '%TEMPLATE_SOURCE_PATH='
+    const isBundleWorkspace = ref(false)
+    const bundleEntrySourcePath = ref('')
+    const workspaceEntryRelativePath = ref('')
+    const workspaceFiles = ref([])
+    const activeWorkspaceFile = ref('')
+
+    const showWorkspaceFileSelect = computed(
+      () => isBundleWorkspace.value && workspaceFiles.value.length > 0
+    )
+
+    const parseProjectBundle = (content) => {
+      if (!content || typeof content !== 'string') return null
+      const normalized = content.replace(/\r\n/g, '\n')
+      const firstLineEnd = normalized.indexOf('\n')
+      const firstLine = firstLineEnd >= 0 ? normalized.slice(0, firstLineEnd) : normalized
+      if (!firstLine.startsWith(WORKSPACE_PREFIX)) return null
+      const sourcePath = firstLine.slice(WORKSPACE_PREFIX.length).trim()
+      if (!sourcePath) return null
+      const body = firstLineEnd >= 0 ? normalized.slice(firstLineEnd + 1) : ''
+      return { sourcePath, body }
+    }
+
+    const resetWorkspaceState = () => {
+      isBundleWorkspace.value = false
+      bundleEntrySourcePath.value = ''
+      workspaceEntryRelativePath.value = ''
+      workspaceFiles.value = []
+      activeWorkspaceFile.value = ''
+    }
+
+    const getEditorText = () => {
+      if (codeEditorView.value) {
+        return codeEditorView.value.state.doc.toString()
+      }
+      return latexCode.value || ''
+    }
+
+    const persistCurrentEditorWithActive = async (currentRelative) => {
+      const body = getEditorText()
+      if (!isBundleWorkspace.value) {
+        await updateProject(projectId.value, { content: body })
+        return
+      }
+      const rel = currentRelative || activeWorkspaceFile.value
+      if (!rel) return
+      if (rel === workspaceEntryRelativePath.value) {
+        const full = `${WORKSPACE_PREFIX}${bundleEntrySourcePath.value}\n${body}`
+        await updateProject(projectId.value, { content: full })
+      } else {
+        await updateProjectWorkspaceFile(projectId.value, rel, body)
+      }
+    }
+
+    const persistCurrentEditor = async () => {
+      await persistCurrentEditorWithActive(activeWorkspaceFile.value)
+    }
+
+    const loadWorkspaceFileContent = async (rel) => {
+      if (rel === workspaceEntryRelativePath.value) {
+        const res = await getProjectById(projectId.value)
+        const raw = res.data?.content || ''
+        const parsed = parseProjectBundle(raw)
+        setEditorContent(parsed ? parsed.body : raw)
+      } else {
+        const res = await getProjectWorkspaceFile(projectId.value, rel)
+        setEditorContent(res.data?.content ?? '')
+      }
+    }
+
+    const onWorkspaceFileSelect = async (event) => {
+      const selectEl = event?.target
+      const next = selectEl?.value
+      const prev = activeWorkspaceFile.value
+      if (!next || next === prev) return
+      try {
+        loading.value = true
+        await persistCurrentEditorWithActive(prev)
+        activeWorkspaceFile.value = next
+        await loadWorkspaceFileContent(next)
+      } catch (error) {
+        if (selectEl) selectEl.value = prev
+        console.error('切换文件失败:', error)
+        alert('切换文件失败: ' + (error.message || '未知错误'))
+      } finally {
+        loading.value = false
+      }
+    }
+
     const latexCode = ref('\\documentclass{article}\\begin{document}\\section{Hello World}\\This is a LaTeX document.\\end{document}')
     const pdfUrl = ref('')
     const codeEditorRef = ref(null)
     const pdfCanvasRef = ref(null)
-    const latexFileInputRef = ref(null)
     const imageFileInputRef = ref(null)
     const codeEditorView = ref(null)
     const pdfDocRef = ref(null)
@@ -316,9 +428,10 @@ export default {
     const pdfScale = ref(1.2)
     const pdfIframeFallback = ref(false)
     const pendingImageInsertPos = ref(null)
-    const autoCompileTimer = ref(null)
+    const AUTO_SAVE_INTERVAL_MS = 5000
+    const autoSaveIntervalId = ref(null)
+    const autoSaveInFlight = ref(false)
     const isCompiling = ref(false)
-    const pendingCompile = ref(false)
     const selectedCompiler = ref('pdflatex')
     const compilerOptions = ref([
       { value: 'pdflatex', label: 'pdfLaTeX' },
@@ -330,10 +443,11 @@ export default {
     const previewStatus = ref('未编译')
     const compileError = ref('')
     const lastCompileReport = ref('')
+    const lastCompileLog = ref('')
+    const showCompileLogPanel = ref(false)
     const cursorLine = ref(1)
     const cursorColumn = ref(1)
     const wordCount = ref(0)
-    const lastSavedTime = ref('从未')
     const showAiDialog = ref(false)
     const aiInput = ref('')
     const aiLoading = ref(false)
@@ -344,6 +458,10 @@ export default {
     const displayCompileReport = computed(() =>
       (compileError.value || lastCompileReport.value || '编译失败，请查看日志').trim()
     )
+
+    const toggleCompileLogPanel = () => {
+      showCompileLogPanel.value = !showCompileLogPanel.value
+    }
 
     const components = ref(Object.entries(componentConfig).map(([type, config]) => ({
       type,
@@ -654,18 +772,28 @@ export default {
       await renderPdfPage()
     }
 
-    const clearAutoCompileTimer = () => {
-      if (autoCompileTimer.value) {
-        clearTimeout(autoCompileTimer.value)
-        autoCompileTimer.value = null
+    const clearAutoSaveInterval = () => {
+      if (autoSaveIntervalId.value != null) {
+        clearInterval(autoSaveIntervalId.value)
+        autoSaveIntervalId.value = null
       }
     }
 
-    const scheduleAutoCompile = () => {
-      clearAutoCompileTimer()
-      autoCompileTimer.value = setTimeout(() => {
-        compileLatex({ silent: true })
-      }, 2000)
+    const runAutoSaveTick = async () => {
+      if (autoSaveInFlight.value) return
+      autoSaveInFlight.value = true
+      try {
+        await persistCurrentEditor()
+      } catch (error) {
+        console.error('自动保存失败:', error)
+      } finally {
+        autoSaveInFlight.value = false
+      }
+    }
+
+    const startAutoSaveInterval = () => {
+      clearAutoSaveInterval()
+      autoSaveIntervalId.value = setInterval(runAutoSaveTick, AUTO_SAVE_INTERVAL_MS)
     }
 
     const createCodeEditor = () => {
@@ -692,9 +820,6 @@ export default {
           EditorView.updateListener.of((update) => {
             if (update.docChanged || update.selectionSet) {
               updateEditorStatus(update.state)
-            }
-            if (update.docChanged) {
-              scheduleAutoCompile()
             }
           })
         ]
@@ -745,15 +870,6 @@ export default {
       }))
     }
 
-    const insertTemplateAtPosition = (text, insertPos, template) => {
-      const before = text.slice(0, insertPos)
-      const after = text.slice(insertPos)
-      return {
-        nextText: `${before}${template}${after}`,
-        caretPos: before.length + template.length
-      }
-    }
-
     const createImageLatex = (pathOrName) => {
       const rawPath = (pathOrName || 'image.png').trim()
       let safePath = rawPath
@@ -774,11 +890,14 @@ export default {
       if (!editorView || !template) {
         return
       }
-      const text = editorView.state.doc.toString()
-      const { nextText, caretPos } = insertTemplateAtPosition(text, insertPos, template)
+      const len = editorView.state.doc.length
+      const raw = Math.trunc(Number(insertPos))
+      const pos = Number.isFinite(raw)
+        ? Math.max(0, Math.min(raw, len))
+        : Math.max(0, Math.min(editorView.state.selection.main.head, len))
       editorView.dispatch({
-        changes: { from: 0, to: text.length, insert: nextText },
-        selection: { anchor: caretPos }
+        changes: { from: pos, to: pos, insert: template },
+        selection: { anchor: pos + template.length }
       })
       editorView.focus()
     }
@@ -906,7 +1025,12 @@ export default {
 
     const handleDrop = (event) => {
       event.preventDefault()
-      const componentData = JSON.parse(event.dataTransfer.getData('application/json'))
+      let componentData
+      try {
+        componentData = JSON.parse(event.dataTransfer.getData('application/json'))
+      } catch {
+        return
+      }
       const editorView = codeEditorView.value
 
       if (!editorView || !componentData) {
@@ -918,16 +1042,9 @@ export default {
         return
       }
 
-      const text = editorView.state.doc.toString()
       const dropPos = editorView.posAtCoords({ x: event.clientX, y: event.clientY })
       const insertPos = dropPos == null ? editorView.state.selection.main.head : dropPos
-      const { nextText, caretPos } = insertTemplateAtPosition(text, insertPos, template)
-
-      editorView.dispatch({
-        changes: { from: 0, to: text.length, insert: nextText },
-        selection: { anchor: caretPos }
-      })
-      editorView.focus()
+      insertTemplateByPosition(insertPos, template)
     }
 
     const goBack = () => {
@@ -938,10 +1055,41 @@ export default {
       loading.value = true
       try {
         const response = await getProjectById(projectId.value)
-        if (response.data) {
-          projectName.value = response.data.name
-          setEditorContent(response.data.content || '')
+        if (!response.data) return
+        projectName.value = response.data.name
+        const rawContent = response.data.content || ''
+        resetWorkspaceState()
+        const parsed = parseProjectBundle(rawContent)
+        if (parsed) {
+          bundleEntrySourcePath.value = parsed.sourcePath
+          try {
+            const ws = await getProjectWorkspaceInfo(projectId.value)
+            if (ws.data?.bundleMode && Array.isArray(ws.data.files) && ws.data.files.length > 0) {
+              let files = [...ws.data.files]
+              const entryRel = ws.data.entryRelativePath || ''
+              workspaceEntryRelativePath.value = entryRel
+              if (entryRel && !files.includes(entryRel)) {
+                files = [entryRel, ...files]
+              }
+              isBundleWorkspace.value = true
+              workspaceFiles.value = files
+              activeWorkspaceFile.value = entryRel && files.includes(entryRel) ? entryRel : files[0]
+              if (activeWorkspaceFile.value === entryRel) {
+                setEditorContent(parsed.body)
+              } else {
+                await loadWorkspaceFileContent(activeWorkspaceFile.value)
+              }
+            } else {
+              setEditorContent(rawContent)
+            }
+          } catch (e) {
+            console.warn('加载工作区文件列表失败，按单文件显示:', e)
+            setEditorContent(rawContent)
+          }
+        } else {
+          setEditorContent(rawContent)
         }
+        startAutoSaveInterval()
       } catch (error) {
         console.error('加载项目失败:', error)
         alert('加载项目失败: ' + (error.message || '未知错误'))
@@ -952,8 +1100,7 @@ export default {
 
     const saveProject = async () => {
       try {
-        await updateProject(projectId.value, { content: latexCode.value })
-        lastSavedTime.value = new Date().toLocaleString()
+        await persistCurrentEditor()
         alert('项目保存成功！')
       } catch (error) {
         console.error('保存项目失败:', error)
@@ -963,7 +1110,6 @@ export default {
 
     const compileLatex = async ({ silent = false } = {}) => {
       if (isCompiling.value) {
-        pendingCompile.value = true
         return
       }
 
@@ -974,15 +1120,17 @@ export default {
       // 开始新一轮编译时清空旧预览，避免失败后仍显示旧 PDF
       pdfUrl.value = ''
       try {
-        await updateProject(projectId.value, { content: latexCode.value })
+        await persistCurrentEditor()
         const response = await compileProject(projectId.value, selectedCompiler.value)
 
         if (response && response.data) {
           const compileResult = response.data
+          lastCompileLog.value = (compileResult.logContent && String(compileResult.logContent)) || ''
           if ((compileResult.status === 'SUCCESS' || compileResult.status === 'WARNING') && compileResult.pdfPath) {
             pdfUrl.value = compileResult.pdfPath
             compileError.value = ''
             lastCompileReport.value = ''
+            showCompileLogPanel.value = false
             previewStatus.value = compileResult.status === 'WARNING' ? '编译完成（有警告）' : '编译成功'
             const compileTime = compileResult.compileTimeMs ? (compileResult.compileTimeMs / 1000).toFixed(2) : '0'
             console.log(`编译完成，耗时: ${compileTime}秒`)
@@ -1003,6 +1151,7 @@ export default {
             pdfUrl.value = ''
           }
         } else {
+          lastCompileLog.value = ''
           previewStatus.value = '编译失败'
           compileError.value = '编译失败：未收到有效响应'
           lastCompileReport.value = compileError.value
@@ -1012,6 +1161,11 @@ export default {
         }
       } catch (error) {
         console.error('编译失败:', error)
+        const errBody = error.response?.data
+        const logFromServer = typeof errBody === 'string' ? errBody : errBody?.logContent
+        if (logFromServer) {
+          lastCompileLog.value = String(logFromServer)
+        }
         previewStatus.value = '编译失败'
         const errorMsg = error.response?.data?.message || error.message || '未知错误'
         compileError.value = `编译失败: ${errorMsg}`
@@ -1023,11 +1177,6 @@ export default {
       } finally {
         isCompiling.value = false
         loading.value = false
-
-        if (pendingCompile.value) {
-          pendingCompile.value = false
-          scheduleAutoCompile()
-        }
       }
     }
 
@@ -1047,7 +1196,7 @@ export default {
 
     const downloadWord = async () => {
       try {
-        await updateProject(projectId.value, { content: latexCode.value })
+        await persistCurrentEditor()
         const response = await exportProjectWord(projectId.value)
         const blob = new Blob(
           [response.data],
@@ -1088,10 +1237,10 @@ export default {
 
     const downloadLatex = async () => {
       try {
-        await updateProject(projectId.value, { content: latexCode.value })
-        const response = await exportProjectLatex(projectId.value)
-        const blob = new Blob([response.data], { type: 'application/x-tex;charset=UTF-8' })
-        const fileName = `${projectName.value || 'latex-document'}.tex`
+        await persistCurrentEditor()
+        const response = await exportProjectZip(projectId.value)
+        const blob = new Blob([response.data], { type: 'application/zip' })
+        const fileName = `${projectName.value || 'latex-document'}.zip`
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
@@ -1101,8 +1250,8 @@ export default {
         document.body.removeChild(link)
         window.URL.revokeObjectURL(url)
       } catch (error) {
-        console.error('导出LaTeX失败:', error)
-        let errorMsg = '导出LaTeX失败'
+        console.error('导出项目 zip 失败:', error)
+        let errorMsg = '导出项目 zip 失败'
         try {
           const data = error?.response?.data
           if (data instanceof Blob) {
@@ -1124,38 +1273,6 @@ export default {
       }
     }
 
-    const triggerImportLatex = () => {
-      if (latexFileInputRef.value) {
-        latexFileInputRef.value.value = ''
-        latexFileInputRef.value.click()
-      }
-    }
-
-    const handleLatexImport = async (event) => {
-      const file = event?.target?.files?.[0]
-      if (!file) return
-      if (!file.name.toLowerCase().endsWith('.tex')) {
-        alert('请导入 .tex 格式文件')
-        return
-      }
-      if (!confirm('导入后将覆盖当前项目内容，是否继续？')) {
-        return
-      }
-
-      try {
-        const content = await file.text()
-        setEditorContent(content || '')
-        await updateProject(projectId.value, { content: content || '' })
-        pdfUrl.value = ''
-        previewStatus.value = '未编译'
-        lastSavedTime.value = new Date().toLocaleString()
-        alert('LaTeX 文件导入成功，已覆盖当前项目')
-      } catch (error) {
-        console.error('导入LaTeX失败:', error)
-        alert('导入LaTeX失败: ' + (error.message || '未知错误'))
-      }
-    }
-
     const openAiDialog = () => {
       showAiDialog.value = true
     }
@@ -1171,7 +1288,7 @@ export default {
       aiInput.value = ''
       aiLoading.value = true
       try {
-        const context = latexCode.value?.slice(0, 12000) || ''
+        const context = getEditorText()?.slice(0, 12000) || ''
         const response = await processWithAI({
           projectId: Number(projectId.value),
           type: 'CHAT',
@@ -1203,7 +1320,7 @@ export default {
         const response = await processWithAI({
           projectId: Number(projectId.value),
           type: 'ERROR_ANALYSIS',
-          content: `编译错误报告：\n${report}\n\n当前LaTeX内容：\n${latexCode.value?.slice(0, 12000) || ''}`
+          content: `编译错误报告：\n${report}\n\n当前LaTeX内容：\n${getEditorText()?.slice(0, 12000) || ''}`
         })
         const result = response?.data?.result || response?.data?.suggestion || 'AI未返回分析结果'
         aiMessages.value.push({ role: 'assistant', content: result })
@@ -1239,7 +1356,7 @@ export default {
     })
 
     onBeforeUnmount(() => {
-      clearAutoCompileTimer()
+      clearAutoSaveInterval()
       if (codeEditorView.value) {
         codeEditorView.value.destroy()
         codeEditorView.value = null
@@ -1249,20 +1366,27 @@ export default {
 
     return {
       projectName,
+      showWorkspaceFileSelect,
+      workspaceFiles,
+      activeWorkspaceFile,
+      onWorkspaceFileSelect,
       selectedCompiler,
       compilerOptions,
       latexCode,
       pdfUrl,
       codeEditorRef,
       pdfCanvasRef,
-      latexFileInputRef,
       imageFileInputRef,
       loading,
+      isCompiling,
       previewStatus,
       compileError,
       lastCompileReport,
       hasCompileErrorReport,
       displayCompileReport,
+      lastCompileLog,
+      showCompileLogPanel,
+      toggleCompileLogPanel,
       showAiDialog,
       aiInput,
       aiLoading,
@@ -1270,7 +1394,6 @@ export default {
       cursorLine,
       cursorColumn,
       wordCount,
-      lastSavedTime,
       components,
       formulaType,
       imageType,
@@ -1286,8 +1409,6 @@ export default {
       downloadPdf,
       downloadWord,
       downloadLatex,
-      triggerImportLatex,
-      handleLatexImport,
       handleImageInsert,
       openAiDialog,
       closeAiDialog,
@@ -1320,10 +1441,11 @@ export default {
 .editor-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
   overflow: hidden;
   padding: 18px;
   gap: 14px;
+  box-sizing: border-box;
 }
 
 /* 顶部导航栏 */
@@ -1348,6 +1470,43 @@ export default {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.header-workspace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(360px, 42vw);
+}
+
+.workspace-select-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fluent-text-2);
+  white-space: nowrap;
+}
+
+.workspace-file-select {
+  flex: 1;
+  min-width: 140px;
+  max-width: 280px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(132, 160, 207, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--fluent-text-1);
+  font-size: 13px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.workspace-file-select:focus {
+  outline: none;
+  border-color: rgba(15, 108, 189, 0.45);
+  box-shadow: 0 0 0 3px rgba(15, 108, 189, 0.12);
 }
 
 .header-center {
@@ -1422,7 +1581,7 @@ export default {
   background-color: #fff;
 }
 
-.save-btn, .compile-btn, .download-btn, .download-word-btn, .download-latex-btn, .import-latex-btn {
+.save-btn, .compile-btn, .download-btn, .download-word-btn, .download-latex-btn {
   min-height: 40px;
   padding: 8px 14px;
   border: 1px solid transparent;
@@ -1448,8 +1607,14 @@ export default {
   color: white;
 }
 
-.compile-btn:hover {
+.compile-btn:hover:not(:disabled) {
   transform: translateY(-1px);
+}
+
+.compile-btn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .download-btn {
@@ -1477,17 +1642,6 @@ export default {
 
 .download-latex-btn:hover {
   transform: translateY(-1px);
-}
-
-.import-latex-btn {
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--fluent-text-1);
-  border-color: rgba(132, 160, 207, 0.18);
-}
-
-.import-latex-btn:hover {
-  background: rgba(240, 247, 255, 0.92);
-  color: var(--fluent-accent);
 }
 
 .latex-file-input {
@@ -1842,6 +1996,31 @@ export default {
   color: var(--fluent-text-1);
 }
 
+.preview-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.preview-log-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid rgba(132, 160, 207, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--fluent-text-1);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.preview-log-btn:hover {
+  background: rgba(223, 236, 255, 0.75);
+  border-color: rgba(90, 136, 220, 0.35);
+}
+
 .preview-status {
   font-size: 14px;
   color: var(--fluent-text-2);
@@ -2008,6 +2187,29 @@ export default {
   padding: 40px;
 }
 
+.compile-log-panel {
+  width: 100%;
+  min-height: 280px;
+  max-height: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid rgba(132, 160, 207, 0.18);
+  border-radius: 18px;
+  background-color: rgba(255, 255, 255, 0.94);
+  overflow: auto;
+  align-self: stretch;
+}
+
+.compile-log-panel pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fluent-text-1);
+}
+
 .compile-error-panel {
   width: 100%;
   height: 100%;
@@ -2072,29 +2274,14 @@ export default {
   font-weight: 600;
 }
 
-.compile-now-btn:hover {
+.compile-now-btn:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-/* 底部状态栏 */
-.editor-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 20px;
-  background: var(--fluent-surface);
-  backdrop-filter: blur(24px) saturate(150%);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  border: 1px solid var(--fluent-border);
-  border-radius: 18px;
-  font-size: 12px;
-  color: var(--fluent-text-2);
-  box-shadow: var(--fluent-shadow);
-}
-
-.status-left, .status-right {
-  display: flex;
-  gap: 15px;
+.compile-now-btn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  transform: none;
 }
 
 @media (max-width: 1280px) {

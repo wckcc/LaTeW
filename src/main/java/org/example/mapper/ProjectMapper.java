@@ -44,5 +44,10 @@ public interface ProjectMapper {
      * @return 影响行数
      */
     int deleteById(Long id);
+
+    /**
+     * 全部项目的 latex_content（维护任务：孤儿 bundle 清理等）。
+     */
+    List<String> selectAllLatexContents();
 }
 

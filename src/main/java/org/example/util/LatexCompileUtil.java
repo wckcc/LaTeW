@@ -10,12 +10,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -47,7 +50,10 @@ public class LatexCompileUtil {
     @Value("${latex.compile.lualatex-path:lualatex}")
     private String lualatexPath;
 
-    @Value("${latex.compile.timeout:30}")
+    @Value("${latex.compile.latexmk-path:latexmk}")
+    private String latexmkPath;
+
+    @Value("${latex.compile.timeout:300}")
     private int timeoutSeconds;
 
     @Value("${image.upload.path:./static/images}")
@@ -98,7 +104,80 @@ public class LatexCompileUtil {
         }
     }
 
-    private String prepareImagesForCompile(String latexContent, Path tempWorkDir) {
+    private static String nfc(String s) {
+        if (s == null) {
+            return "";
+        }
+        return Normalizer.normalize(s, Normalizer.Form.NFC);
+    }
+
+    private static boolean isGraphicsExtension(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")
+                || lower.endsWith(".pdf") || lower.endsWith(".eps") || lower.endsWith(".mps")
+                || lower.endsWith(".bmp") || lower.endsWith(".gif");
+    }
+
+    /**
+     * 在临时工作区（zip 工程副本）中按相对路径、或按 Unicode 规范化后的文件名匹配图片。
+     * 解决 Windows 下 .tex 与磁盘 NFC/NFD 不一致、以及 xelatex/xdvipdfmx 找不到含中文/空格文件名的问题。
+     */
+    private Path resolveGraphicsInTempBundle(Path bundleRoot, Path jobDir, String originalPath) {
+        if (bundleRoot == null || jobDir == null || originalPath == null || originalPath.isBlank()) {
+            return null;
+        }
+        try {
+            Path b = bundleRoot.toAbsolutePath().normalize();
+            Path job = jobDir.toAbsolutePath().normalize();
+            if (!job.startsWith(b)) {
+                return null;
+            }
+            String ref = originalPath.trim().replace('\\', '/');
+            int q = ref.indexOf('?');
+            if (q >= 0) {
+                ref = ref.substring(0, q);
+            }
+            ref = URLDecoder.decode(ref, StandardCharsets.UTF_8);
+            if (ref.isBlank()) {
+                return null;
+            }
+            Path directJob = job.resolve(ref).normalize();
+            if (directJob.startsWith(b) && Files.isRegularFile(directJob)) {
+                return directJob;
+            }
+            Path directBundle = b.resolve(ref).normalize();
+            if (directBundle.startsWith(b) && Files.isRegularFile(directBundle)) {
+                return directBundle;
+            }
+            int slash = ref.lastIndexOf('/');
+            String base = slash >= 0 ? ref.substring(slash + 1) : ref;
+            if (base.isBlank()) {
+                return null;
+            }
+            String baseNfc = nfc(base);
+            try (Stream<Path> walk = Files.walk(b)) {
+                return walk.filter(Files::isRegularFile)
+                        .filter(p -> isGraphicsExtension(p.getFileName().toString()))
+                        .filter(p -> {
+                            String fn = p.getFileName().toString();
+                            return nfc(fn).equals(baseNfc) || fn.equals(base);
+                        })
+                        .findFirst()
+                        .orElse(null);
+            }
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * @param bundleRoot  临时目录下整包根（与 copyTemplateDependencies 输出一致）
+     * @param jobTexDir     主 .tex 所在目录（latex 解析相对路径的基准）
+     */
+    private String prepareImagesForCompile(String latexContent, Path bundleRoot, Path jobTexDir) {
         if (latexContent == null || latexContent.isBlank()) {
             return latexContent;
         }
@@ -127,11 +206,20 @@ public class LatexCompileUtil {
                 fileName = fileName.substring(slashIdx + 1);
             }
             Path source = resolveImageSource(rawFileName);
-            Path target = tempWorkDir.resolve(fileName);
+            Path target = jobTexDir.resolve(fileName);
             try {
                 if (source != null && Files.exists(source) && Files.isRegularFile(source)) {
                     Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
                     replacementPath = fileName;
+                } else {
+                    Path onDisk = resolveGraphicsInTempBundle(bundleRoot, jobTexDir, originalPath);
+                    if (onDisk != null && Files.isRegularFile(onDisk)) {
+                        Path rel = jobTexDir.relativize(onDisk).normalize();
+                        String relStr = rel.toString().replace('\\', '/');
+                        if (!relStr.startsWith("..")) {
+                            replacementPath = relStr;
+                        }
+                    }
                 }
             } catch (Exception ignored) {
                 // 保持原路径，后续编译日志会给出错误信息
@@ -377,12 +465,9 @@ public class LatexCompileUtil {
 
     private boolean shouldRunBibtex(Path workDir, String texFileName) {
         try {
-            String baseName = texFileName;
-            int dot = baseName.lastIndexOf('.');
-            if (dot > 0) {
-                baseName = baseName.substring(0, dot);
-            }
-            Path auxFile = workDir.resolve(baseName + ".aux");
+            String baseName = getBaseName(texFileName);
+            Path jobDir = resolveJobDirectory(workDir, texFileName);
+            Path auxFile = jobDir.resolve(baseName + ".aux");
             if (!Files.exists(auxFile) || !Files.isRegularFile(auxFile)) {
                 return false;
             }
@@ -398,36 +483,236 @@ public class LatexCompileUtil {
         }
     }
 
-    private String runBibtexCommand(Path workDir, String texFileName) {
-        StringBuilder logOutput = new StringBuilder();
-        try {
-            String baseName = texFileName;
-            int dot = baseName.lastIndexOf('.');
-            if (dot > 0) {
-                baseName = baseName.substring(0, dot);
+    /**
+     * 主 .tex 所在目录（biber/bibtex 需在此 cwd 下执行）
+     */
+    private Path resolveJobDirectory(Path workDir, String texFileName) {
+        int slash = Math.max(texFileName.lastIndexOf('/'), texFileName.lastIndexOf('\\'));
+        if (slash < 0) {
+            return workDir.toAbsolutePath().normalize();
+        }
+        String relDir = texFileName.substring(0, slash).replace("\\", "/");
+        return workDir.resolve(relDir).normalize();
+    }
+
+    /**
+     * 从模板 bundle 复制到临时目录时可能带入旧的 .toc/.aux 等；\@starttoc 会优先读这些文件导致目录页一直异常。
+     * 仅在每轮完整编译开始前调用一次（各次引擎之间仍保留 .aux/.toc 供多轮修正）。
+     */
+    private void purgeStaleAuxiliaryFiles(Path workDir, String texFileName) {
+        if (texFileName == null || texFileName.isBlank()) {
+            return;
+        }
+        String norm = texFileName.replace('\\', '/');
+        String baseName = getBaseName(norm);
+        Path jobDir = resolveJobDirectory(workDir, norm);
+        String[] suffixes = {
+                ".aux", ".toc", ".out", ".lof", ".lot",
+                ".bcf", ".bbl", ".blg", ".run.xml",
+                ".fdb_latexmk", ".fls", ".synctex.gz", ".synctex"
+        };
+        for (String suf : suffixes) {
+            try {
+                Files.deleteIfExists(jobDir.resolve(baseName + suf));
+            } catch (Exception ignored) {
             }
+        }
+    }
 
-            ProcessBuilder pb = new ProcessBuilder("bibtex", baseName);
-            pb.directory(workDir.toAbsolutePath().toFile());
+    /**
+     * biblatex + biber：首轮 xelatex/pdf 后生成 .bcf
+     */
+    private boolean shouldRunBiber(Path workDir, String texFileName, String baseName) {
+        try {
+            Path jobDir = resolveJobDirectory(workDir, texFileName);
+            Path bcf = jobDir.resolve(baseName + ".bcf");
+            return Files.exists(bcf) && Files.isRegularFile(bcf) && Files.size(bcf) > 32L;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private Path locateGeneratedPdf(Path workDir, String texFileName) {
+        String baseName = getBaseName(texFileName);
+        Path jobDir = resolveJobDirectory(workDir, texFileName);
+        Path beside = jobDir.resolve(baseName + ".pdf").normalize();
+        if (beside.startsWith(workDir.normalize()) && Files.exists(beside) && Files.isRegularFile(beside)) {
+            return beside;
+        }
+        Path root = workDir.resolve(baseName + ".pdf").normalize();
+        if (Files.exists(root) && Files.isRegularFile(root)) {
+            return root;
+        }
+        return beside;
+    }
+
+    private Path locateGeneratedXdv(Path workDir, String texFileName) {
+        String baseName = getBaseName(texFileName);
+        Path jobDir = resolveJobDirectory(workDir, texFileName);
+        Path beside = jobDir.resolve(baseName + ".xdv").normalize();
+        if (beside.startsWith(workDir.normalize()) && Files.exists(beside)) {
+            return beside;
+        }
+        return workDir.resolve(baseName + ".xdv").normalize();
+    }
+
+    private boolean isLatexmkAvailable() {
+        if (latexmkPath == null || latexmkPath.isBlank()) {
+            return false;
+        }
+        try {
+            ProcessBuilder pb = new ProcessBuilder(latexmkPath.trim(), "-v");
             pb.redirectErrorStream(true);
-
-            Process process = pb.start();
+            Process p = pb.start();
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), "UTF-8"))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    logOutput.append(line).append("\n");
+                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                while (reader.readLine() != null) {
+                    // drain
                 }
             }
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                logOutput.append("bibtex 执行超时\n");
-            }
-        } catch (Exception e) {
-            logOutput.append("bibtex 执行失败: ").append(e.getMessage()).append("\n");
+            boolean finished = p.waitFor(8, TimeUnit.SECONDS);
+            return finished && p.exitValue() == 0;
+        } catch (Exception ignored) {
+            return false;
         }
-        return logOutput.toString();
+    }
+
+    private CompileExecutionResult runBibtexProcess(String baseName, Path jobDirectory) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder("bibtex", baseName);
+        pb.directory(jobDirectory.toAbsolutePath().toFile());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        StringBuilder logOutput = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                logOutput.append(line).append("\n");
+            }
+        }
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new RuntimeException("bibtex 执行超时（超过 " + timeoutSeconds + " 秒）");
+        }
+        return new CompileExecutionResult(process.exitValue(), logOutput.toString());
+    }
+
+    /**
+     * 必须为 {@code biber main} 形式（jobname，无 .tex 后缀）
+     */
+    private CompileExecutionResult runBiberProcess(String baseName, Path jobDirectory) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder("biber", baseName);
+        pb.directory(jobDirectory.toAbsolutePath().toFile());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        StringBuilder logOutput = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                logOutput.append(line).append("\n");
+            }
+        }
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new RuntimeException("biber 执行超时（超过 " + timeoutSeconds + " 秒）");
+        }
+        return new CompileExecutionResult(process.exitValue(), logOutput.toString());
+    }
+
+    private CompileExecutionResult runLatexmk(Path workDir, String texFileName, String normalizedCompiler) throws Exception {
+        String norm = texFileName.replace('\\', '/');
+        int slash = norm.lastIndexOf('/');
+        Path cwd = workDir.toAbsolutePath().normalize();
+        String mkTarget = norm;
+        if (slash >= 0) {
+            cwd = resolveJobDirectory(workDir, norm);
+            mkTarget = norm.substring(slash + 1);
+        }
+        List<String> cmd = new ArrayList<>();
+        cmd.add(latexmkPath.trim());
+        switch (normalizedCompiler) {
+            case "xelatex" -> cmd.add("-xelatex");
+            case "lualatex" -> cmd.add("-lualatex");
+            default -> cmd.add("-pdf");
+        }
+        cmd.add("-interaction=nonstopmode");
+        cmd.add("-file-line-error");
+        cmd.add(mkTarget);
+
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.directory(cwd.toFile());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        StringBuilder logOutput = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                logOutput.append(line).append("\n");
+            }
+        }
+        boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new RuntimeException("latexmk 执行超时（超过 " + timeoutSeconds + " 秒）");
+        }
+        return new CompileExecutionResult(process.exitValue(), logOutput.toString());
+    }
+
+    /**
+     * 手动多轮：含参考文献时为 引擎 + biber/bibtex + 引擎 + 引擎 + 第5次收尾；
+     * 无文献时为 4 次引擎。子目录入口由 {@link #runCompileCommand} 在 .tex 所在目录执行。
+     */
+    private int runManualMultiPass(Path workDir, String texFileName, String normalizedCompiler,
+                                   String compilerCommand, StringBuilder logOutput) throws Exception {
+        String baseName = getBaseName(texFileName);
+        String texArg = texFileName.replace("\\", "/");
+        Path jobDir = resolveJobDirectory(workDir, texArg);
+
+        CompileExecutionResult p1 = runCompileCommand(compilerCommand, texArg, workDir);
+        logOutput.append("\n=== ").append(normalizedCompiler).append(" [第 1 次] ===\n")
+                .append(p1.logContent).append("\n[退出码 ").append(p1.exitCode).append("]\n");
+
+        boolean needsBiber = shouldRunBiber(workDir, texFileName, baseName);
+        boolean needsBibtex = !needsBiber && shouldRunBibtex(workDir, texFileName);
+        int lastExit = p1.exitCode;
+
+        if (needsBiber) {
+            CompileExecutionResult br = runBiberProcess(baseName, jobDir);
+            logOutput.append("\n=== biber ").append(baseName).append(" ===\n")
+                    .append(br.logContent).append("\n[退出码 ").append(br.exitCode).append("]\n");
+            lastExit = br.exitCode;
+        } else if (needsBibtex) {
+            CompileExecutionResult bt = runBibtexProcess(baseName, jobDir);
+            logOutput.append("\n=== bibtex ").append(baseName).append(" ===\n")
+                    .append(bt.logContent).append("\n[退出码 ").append(bt.exitCode).append("]\n");
+            lastExit = bt.exitCode;
+        }
+
+        CompileExecutionResult p2 = runCompileCommand(compilerCommand, texArg, workDir);
+        logOutput.append("\n=== ").append(normalizedCompiler).append(" [第 2 次] ===\n")
+                .append(p2.logContent).append("\n[退出码 ").append(p2.exitCode).append("]\n");
+        lastExit = p2.exitCode;
+
+        if (needsBiber || needsBibtex) {
+            CompileExecutionResult p3 = runCompileCommand(compilerCommand, texArg, workDir);
+            logOutput.append("\n=== ").append(normalizedCompiler).append(" [第 3 次] ===\n")
+                    .append(p3.logContent).append("\n[退出码 ").append(p3.exitCode).append("]\n");
+            lastExit = p3.exitCode;
+        } else {
+            CompileExecutionResult p3 = runCompileCommand(compilerCommand, texArg, workDir);
+            logOutput.append("\n=== ").append(normalizedCompiler).append(" [第 3 次：目录/页码/交叉引用] ===\n")
+                    .append(p3.logContent).append("\n[退出码 ").append(p3.exitCode).append("]\n");
+            lastExit = p3.exitCode;
+        }
+
+        CompileExecutionResult p4 = runCompileCommand(compilerCommand, texArg, workDir);
+        logOutput.append("\n=== ").append(normalizedCompiler).append(" [第 4 次：目录/页码定稿] ===\n")
+                .append(p4.logContent).append("\n[退出码 ").append(p4.exitCode).append("]\n");
+        return p4.exitCode != 0 ? p4.exitCode : lastExit;
     }
 
     private String getBaseName(String texFileName) {
@@ -473,7 +758,7 @@ public class LatexCompileUtil {
                 texFile = tempWorkDir.resolve(texFileName).normalize();
             }
             Path compileTexDir = texFile.getParent() == null ? tempWorkDir : texFile.getParent();
-            latexContent = prepareImagesForCompile(latexContent, compileTexDir);
+            latexContent = prepareImagesForCompile(latexContent, tempWorkDir, compileTexDir);
             latexContent = enforceSpringerClassWhenAvailable(latexContent, compileTexDir);
             latexContent = ensureGraphicxPackage(latexContent);
             boolean allowClassFallback = templateContext.sourceTexPath == null;
@@ -484,38 +769,51 @@ public class LatexCompileUtil {
             }
             // 写入 LaTeX 内容到文件
             Files.write(texFile, latexContent.getBytes("UTF-8"));
-            
-            // 确定编译器命令
+            purgeStaleAuxiliaryFiles(tempWorkDir, texFileName);
+
             String normalizedCompiler = normalizeCompiler(compiler);
             String compilerCommand = getCompilerCommand(normalizedCompiler);
-            
-            CompileExecutionResult execution = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
-            StringBuilder logOutput = new StringBuilder(execution.logContent);
-            int exitCode = execution.exitCode;
+            String texArg = texFileName.replace("\\", "/");
 
-            if (shouldRunBibtex(tempWorkDir, texFileName)) {
-                String bibtexLog = runBibtexCommand(tempWorkDir, texFileName);
-                if (!bibtexLog.isBlank()) {
-                    logOutput.append("\n[bibtex]\n").append(bibtexLog).append("\n");
+            StringBuilder logOutput = new StringBuilder();
+            int exitCode;
+            if (isLatexmkAvailable()) {
+                logOutput.append("=== latexmk（优先；子目录工程在 .tex 所在目录执行） ===\n");
+                CompileExecutionResult mk = runLatexmk(tempWorkDir, texFileName, normalizedCompiler);
+                logOutput.append(mk.logContent).append("\n[退出码 ").append(mk.exitCode).append("]\n");
+                exitCode = mk.exitCode;
+                if (mk.exitCode == 0) {
+                    Path pdfProbe = locateGeneratedPdf(tempWorkDir, texFileName);
+                    if (Files.exists(pdfProbe)) {
+                        for (int pass = 1; pass <= 3; pass++) {
+                            try {
+                                logOutput.append("\n=== ").append(normalizedCompiler)
+                                        .append(" [补 ").append(pass).append("/3：目录/页码/交叉引用] ===\n");
+                                CompileExecutionResult extra = runCompileCommand(compilerCommand, texArg, tempWorkDir);
+                                logOutput.append(extra.logContent).append("\n[退出码 ").append(extra.exitCode).append("]\n");
+                                if (extra.exitCode != 0) {
+                                    logOutput.append("[提示] 补编译退出码非零，仍保留 latexmk 生成的 PDF；请查看日志。\n");
+                                }
+                            } catch (Exception e) {
+                                logOutput.append("\n[补编译异常] ").append(e.getMessage()).append("\n");
+                            }
+                        }
+                    }
                 }
-                CompileExecutionResult secondPass = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
-                logOutput.append("\n[latex-pass-2]\n").append(secondPass.logContent).append("\n");
-                exitCode = secondPass.exitCode;
-
-                CompileExecutionResult thirdPass = runCompileCommand(compilerCommand, texFileName, tempWorkDir);
-                logOutput.append("\n[latex-pass-3]\n").append(thirdPass.logContent).append("\n");
-                exitCode = thirdPass.exitCode;
+            } else {
+                logOutput.append("[提示] 未检测到 latexmk（请配置 latex.compile.latexmk-path 或安装 latexmk），")
+                        .append("使用手动多轮编译（含第 4 次定稿目录）；若存在 biber/bibtex 则插入文献处理后再编译。\n");
+                exitCode = runManualMultiPass(tempWorkDir, texFileName, normalizedCompiler, compilerCommand, logOutput);
             }
+
             long compileTime = System.currentTimeMillis() - startTime;
-            
-            String baseName = getBaseName(texFileName);
-            // 检查PDF是否生成（即使退出码不为0，如果PDF生成了也认为成功）
-            Path pdfFile = tempWorkDir.resolve(baseName + ".pdf");
+
+            Path pdfFile = locateGeneratedPdf(tempWorkDir, texFileName);
             if (!Files.exists(pdfFile) && "xelatex".equals(normalizedCompiler)) {
                 // 某些 XeLaTeX 环境会产出 XDV，需要额外转换为 PDF
-                Path xdvFile = tempWorkDir.resolve(baseName + ".xdv");
+                Path xdvFile = locateGeneratedXdv(tempWorkDir, texFileName);
                 if (Files.exists(xdvFile)) {
-                    String xdvLog = convertXdvToPdf(tempWorkDir, xdvFile);
+                    String xdvLog = convertXdvToPdf(xdvFile);
                     if (xdvLog != null && !xdvLog.isEmpty()) {
                         logOutput.append("\n[xdvipdfmx]\n").append(xdvLog).append("\n");
                     }
@@ -583,7 +881,9 @@ public class LatexCompileUtil {
             } else {
                 // 编译失败，没有生成PDF
                 result.setStatus("ERROR");
-                result.setErrorMessage(extractErrorMessage(logContent));
+                String hint = extractErrorMessage(logContent);
+                result.setErrorMessage("未生成 PDF（最后记录退出码 " + exitCode + "）。"
+                        + (hint.isBlank() ? "" : "\n" + hint));
                 result.setPdfPath(null);
             }
             
@@ -596,18 +896,27 @@ public class LatexCompileUtil {
     }
 
     private CompileExecutionResult runCompileCommand(String compilerCommand, String texFileName, Path workDir) throws Exception {
+        String norm = texFileName.replace('\\', '/');
+        int slash = norm.lastIndexOf('/');
+        Path cwd = workDir.toAbsolutePath().normalize();
+        String texArg = norm;
+        if (slash >= 0) {
+            cwd = resolveJobDirectory(workDir, norm);
+            texArg = norm.substring(slash + 1);
+        }
         ProcessBuilder processBuilder = new ProcessBuilder(
                 compilerCommand,
                 "-interaction=nonstopmode",
-                texFileName
+                "-file-line-error",
+                texArg
         );
-        processBuilder.directory(workDir.toAbsolutePath().toFile());
+        processBuilder.directory(cwd.toFile());
         processBuilder.redirectErrorStream(true);
 
         Process process = processBuilder.start();
         StringBuilder logOutput = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), "UTF-8"))) {
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 logOutput.append(line).append("\n");
@@ -635,19 +944,23 @@ public class LatexCompileUtil {
     /**
      * 将 XeLaTeX 产出的 xdv 转换为 PDF
      */
-    private String convertXdvToPdf(Path tempWorkDir, Path xdvFile) {
+    private String convertXdvToPdf(Path xdvFile) {
         StringBuilder logOutput = new StringBuilder();
         try {
+            Path workDirForXdv = xdvFile.getParent();
+            if (workDirForXdv == null) {
+                return "xdvipdfmx: 无效的 xdv 路径";
+            }
             ProcessBuilder pb = new ProcessBuilder(
                     "xdvipdfmx",
                     xdvFile.getFileName().toString()
             );
-            pb.directory(tempWorkDir.toAbsolutePath().toFile());
+            pb.directory(workDirForXdv.toAbsolutePath().toFile());
             pb.redirectErrorStream(true);
 
             Process p = pb.start();
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(p.getInputStream(), "UTF-8"))) {
+                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     logOutput.append(line).append("\n");

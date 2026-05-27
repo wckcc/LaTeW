@@ -71,5 +71,11 @@
         WHERE project_id = #{id, jdbcType=BIGINT}
     </delete>
 
+    <select id="selectAllLatexContents" resultType="java.lang.String">
+        SELECT latex_content
+        FROM project
+        WHERE latex_content IS NOT NULL AND latex_content != ''
+    </select>
+
 </mapper>
 

@@ -68,5 +68,11 @@
         WHERE template_id = #{templateId, jdbcType=BIGINT}
     </update>
 
+    <select id="selectAllTemplatePaths" resultType="java.lang.String">
+        SELECT template_path
+        FROM template
+        WHERE template_path IS NOT NULL AND template_path != ''
+    </select>
+
 </mapper>
 

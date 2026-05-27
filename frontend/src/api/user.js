@@ -85,3 +85,17 @@ export function updateUsername(userId, username) {
   })
 }
 
+/**
+ * 修改密码
+ * @param {number} userId
+ * @param {string} oldPassword
+ * @param {string} newPassword
+ */
+export function changePassword(userId, oldPassword, newPassword) {
+  return request({
+    url: `/users/${userId}/password`,
+    method: 'put',
+    data: { oldPassword, newPassword }
+  })
+}
+

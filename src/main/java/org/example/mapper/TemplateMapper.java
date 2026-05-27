@@ -48,5 +48,10 @@ public interface TemplateMapper {
      * 增加模板使用次数
      */
     int incrementUsageCount(Long templateId);
+
+    /**
+     * 全部模板的 template_path（维护任务：孤儿模板 bundle 清理）。
+     */
+    List<String> selectAllTemplatePaths();
 }
 

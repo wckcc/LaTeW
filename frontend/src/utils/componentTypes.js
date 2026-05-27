@@ -33,17 +33,17 @@ export const componentConfig = {
   [ComponentType.HEADING_1]: {
     name: '一级标题',
     icon: '📌',
-    latexTemplate: '\\section{标题内容}'
+    latexTemplate: '\\chapter{标题内容}'
   },
   [ComponentType.HEADING_2]: {
     name: '二级标题',
     icon: '📎',
-    latexTemplate: '\\subsection{标题内容}'
+    latexTemplate: '\\section{标题内容}'
   },
   [ComponentType.HEADING_3]: {
     name: '三级标题',
     icon: '📏',
-    latexTemplate: '\\subsubsection{标题内容}'
+    latexTemplate: '\\subsection{标题内容}'
   },
   [ComponentType.FORMULA]: {
     name: '公式',
