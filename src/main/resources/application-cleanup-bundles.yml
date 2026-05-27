@@ -1,0 +1,9 @@
+# spring.profiles.active=cleanup-bundles 时使用（见 ProjectBundlesCleanupRunner）
+# 须用 spring.main.web-application-type（勿写成 spring.web-application-type，否则仍会启动 Tomcat 占 8080）
+spring:
+  main:
+    web-application-type: none
+
+latew:
+  cleanup-bundles:
+    dry-run: true

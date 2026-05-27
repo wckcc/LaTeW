@@ -4,3 +4,9 @@
 *.class
 *Test.java
 **/test/
+*.log
+/static/avatars/*
+/static/images/*
+/static/pdf/*
+/static/project_bundles/*
+/static/word/*
